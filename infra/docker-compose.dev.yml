@@ -33,6 +33,17 @@ services:
       timeout: 5s
       retries: 5
 
+  ocr-worker:
+    build:
+      context: ../ocr-worker
+      dockerfile: Dockerfile
+    container_name: finledger-ocr-worker
+    restart: unless-stopped
+    ports:
+      - "8081:8081"
+    environment:
+      - PORT=8081
+
 volumes:
   postgres_data:
   redis_data:

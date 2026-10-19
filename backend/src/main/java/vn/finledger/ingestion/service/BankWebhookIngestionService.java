@@ -18,10 +18,19 @@ import vn.finledger.ledger.dto.PostingLegRequest;
 import vn.finledger.ledger.dto.RecordTransactionRequest;
 import vn.finledger.ledger.service.LedgerService;
 
+import vn.finledger.splitbill.domain.DebtSettlement;
+import vn.finledger.splitbill.domain.SettlementStatus;
+import vn.finledger.splitbill.repository.DebtSettlementRepository;
+import vn.finledger.splitbill.service.GroupSplitService;
+
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @Slf4j
 @Service
@@ -35,6 +44,10 @@ public class BankWebhookIngestionService {
     private final WebhookInboxLogRepository webhookInboxLogRepository;
     private final PiiSanitizer piiSanitizer;
     private final ObjectMapper objectMapper;
+    private final GroupSplitService groupSplitService;
+    private final DebtSettlementRepository debtSettlementRepository;
+
+    private static final Pattern SETTLEMENT_CODE_PATTERN = Pattern.compile("FLV[A-Z0-9]{6}");
 
     /**
      * Ingests bank webhook payload with two-phase Redis idempotency,
@@ -75,6 +88,26 @@ public class BankWebhookIngestionService {
             BigDecimal amount = payload.getTransferAmount();
             if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
                 throw new IllegalArgumentException("Transfer amount must be strictly greater than zero");
+            }
+
+            // VietQR Auto-Settlement Check: match pending group debt settlements by settlement_code
+            if ("IN".equalsIgnoreCase(transferType) && payload.getContent() != null) {
+                Matcher matcher = SETTLEMENT_CODE_PATTERN.matcher(payload.getContent());
+                if (matcher.find()) {
+                    String code = matcher.group();
+                    Optional<DebtSettlement> settlementOpt = debtSettlementRepository
+                            .findBySettlementCodeAndStatus(code, SettlementStatus.PENDING);
+                    if (settlementOpt.isPresent()) {
+                        DebtSettlement settlement = settlementOpt.get();
+                        BigDecimal expectedAmount = settlement.getAmount().setScale(4, RoundingMode.HALF_EVEN);
+                        BigDecimal actualAmount = amount.setScale(4, RoundingMode.HALF_EVEN);
+                        if (expectedAmount.compareTo(actualAmount) == 0) {
+                            log.info("VietQR Auto-Settlement triggered for code={}, settlementId={}",
+                                    code, settlement.getId());
+                            groupSplitService.settleDebt(settlement.getId());
+                        }
+                    }
+                }
             }
 
             BigDecimal bankDelta;

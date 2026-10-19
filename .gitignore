@@ -27,3 +27,5 @@ Desktop.ini
 # Database & runtime data
 .pgdata/
 *.pid
+.jqwik-database/
+.jqwik-database
