@@ -1,0 +1,29 @@
+# ==============================================================================
+# FinLedger VN - Git Ignore Rules
+# ==============================================================================
+
+# Target build directories
+**/target/
+**/dist/
+**/node_modules/
+
+# Environment variables & secrets (CRITICAL: Do NOT push to public repo)
+.env
+.env.*
+!.env.example
+*.env.local
+
+# IDE & Editor configuration
+.idea/
+*.iml
+.vscode/
+*.log
+
+# OS temporary files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Database & runtime data
+.pgdata/
+*.pid
