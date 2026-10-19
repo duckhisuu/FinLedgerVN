@@ -24,7 +24,7 @@ cp .env.example .env
 
 ### 2. Khởi động Hạ tầng Dev (PostgreSQL 16 & Redis 7)
 ```bash
-docker compose -f infra/docker-compose.dev.yml up -d
+docker compose --env-file .env -f infra/docker-compose.dev.yml up -d
 ```
 
 ### 3. Chạy Backend (Spring Boot 3.3+, Java 21)

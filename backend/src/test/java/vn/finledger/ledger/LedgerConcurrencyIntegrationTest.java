@@ -9,6 +9,7 @@ import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -45,12 +46,19 @@ public class LedgerConcurrencyIntegrationTest {
             .withUsername("testuser")
             .withPassword("testpass");
 
+    @Container
+    static GenericContainer<?> redis = new GenericContainer<>("redis:7-alpine")
+            .withExposedPorts(6379);
+
     @DynamicPropertySource
     static void configureProperties(DynamicPropertyRegistry registry) {
         registry.add("spring.datasource.url", postgres::getJdbcUrl);
         registry.add("spring.datasource.username", postgres::getUsername);
         registry.add("spring.datasource.password", postgres::getPassword);
         registry.add("spring.flyway.enabled", () -> "true");
+        registry.add("spring.data.redis.host", redis::getHost);
+        registry.add("spring.data.redis.port", () -> redis.getMappedPort(6379));
+        registry.add("finledger.ai.enabled", () -> "false");
     }
 
     @Autowired
@@ -70,10 +78,11 @@ public class LedgerConcurrencyIntegrationTest {
 
     @BeforeEach
     void cleanUp() {
-        // Drop trigger temporarily or clean tables safely if needed
-        // Note: posting_legs and journal_entries have immutability triggers.
-        // We can disable triggers for cleanUp or delete in child-first order if triggers allow,
-        // or disable session replication triggers.
+        // Delete child tables first to satisfy foreign key constraints
+        jdbcTemplate.execute("DELETE FROM webhook_inbox_logs");
+        jdbcTemplate.execute("DELETE FROM categorization_rules");
+        jdbcTemplate.execute("DELETE FROM bank_account_mappings");
+
         jdbcTemplate.execute("ALTER TABLE journal_entries DISABLE TRIGGER trg_prevent_journal_entries_mutation");
         jdbcTemplate.execute("ALTER TABLE posting_legs DISABLE TRIGGER trg_prevent_posting_legs_mutation");
         jdbcTemplate.execute("DELETE FROM posting_legs");
