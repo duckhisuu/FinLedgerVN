@@ -10,8 +10,19 @@ logger = logging.getLogger("ocr-worker")
 
 app = FastAPI(title="FinLedger VN OCR Worker", version="1.0.0")
 
-# Initialize PaddleOCR with CPU mode and lightweight models
-ocr_engine = PaddleOCR(use_angle_cls=True, lang="vi", use_gpu=False, show_log=False)
+# Lazy-loaded PaddleOCR engine
+ocr_engine = None
+
+def get_ocr_engine():
+    global ocr_engine
+    if ocr_engine is None:
+        try:
+            logger.info("Initializing PaddleOCR with textline orientation...")
+            ocr_engine = PaddleOCR(lang="vi", use_textline_orientation=True)
+        except Exception as e:
+            logger.warning("PaddleOCR fallback initialization: %s", e)
+            ocr_engine = PaddleOCR(lang="vi")
+    return ocr_engine
 
 @app.get("/health")
 def health():
@@ -40,7 +51,8 @@ async def predict(file: UploadFile = File(...)):
         )
 
         # Step 2: Run PaddleOCR on preprocessed image
-        results = ocr_engine.ocr(thresh, cls=True)
+        engine = get_ocr_engine()
+        results = engine.ocr(thresh)
 
         boxes = []
         if results and results[0]:
