@@ -12,6 +12,7 @@ import java.util.UUID;
 @Repository
 public interface DebtSettlementRepository extends JpaRepository<DebtSettlement, UUID> {
     List<DebtSettlement> findByGroupIdAndStatus(UUID groupId, SettlementStatus status);
+    List<DebtSettlement> findByGroupIdOrderByCreatedAtDesc(UUID groupId);
     Optional<DebtSettlement> findBySettlementCodeAndStatus(String settlementCode, SettlementStatus status);
     Optional<DebtSettlement> findBySettlementCode(String settlementCode);
 }

@@ -19,6 +19,9 @@ public class ExpenseGroup {
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
+    @Column(name = "owner_user_id")
+    private UUID ownerUserId;
+
     @Column(nullable = false)
     private String name;
 

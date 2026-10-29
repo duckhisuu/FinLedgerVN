@@ -2,6 +2,7 @@ package vn.finledger.splitbill.service;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import vn.finledger.ledger.domain.Account;
@@ -18,7 +19,8 @@ import vn.finledger.splitbill.calculator.CalculatedShare;
 import vn.finledger.splitbill.calculator.PennyExactSplitCalculator;
 import vn.finledger.splitbill.calculator.SplitShareInput;
 import vn.finledger.splitbill.domain.*;
-import vn.finledger.splitbill.dto.DebtSettlementDto;
+import vn.finledger.splitbill.dto.*;
+import vn.finledger.splitbill.event.DebtSettledEvent;
 import vn.finledger.splitbill.repository.*;
 
 import java.math.BigDecimal;
@@ -47,6 +49,7 @@ public class GroupSplitService {
     private final DebtSimplificationEngine debtSimplificationEngine;
     private final LedgerService ledgerService;
     private final AccountRepository accountRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
     private static final String ALPHANUMERIC = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
     private static final SecureRandom RANDOM = new SecureRandom();
@@ -56,8 +59,14 @@ public class GroupSplitService {
      */
     @Transactional
     public ExpenseGroup createGroup(String name, String currency, boolean simplifyDebts) {
+        return createGroupForUser(null, name, currency, simplifyDebts);
+    }
+
+    @Transactional
+    public ExpenseGroup createGroupForUser(UUID ownerUserId, String name, String currency, boolean simplifyDebts) {
         String token = UUID.randomUUID().toString().replace("-", "");
         ExpenseGroup group = ExpenseGroup.builder()
+                .ownerUserId(ownerUserId)
                 .name(name)
                 .currency(currency != null ? currency : "VND")
                 .shareToken(token)
@@ -84,8 +93,11 @@ public class GroupSplitService {
         // Create member debt account in ledger
         String accountName = "Group [" + group.getName() + "] - " + displayName;
         var accountResponse = ledgerService.createAccount(CreateAccountRequest.builder()
+                .userId(group.getOwnerUserId())
                 .name(accountName)
                 .accountType(AccountType.ASSET)
+                .accountSubtype("GROUP_DEBT")
+                .includeInTotal(false)
                 .currency(group.getCurrency())
                 .allowNegative(true)
                 .build());
@@ -214,6 +226,12 @@ public class GroupSplitService {
             netBalances.put(member.getId(), ledgerBalance.negate());
         }
 
+        // Clear stale PENDING settlements before saving freshly computed plan
+        List<DebtSettlement> existingPending = debtSettlementRepository.findByGroupIdAndStatus(groupId, SettlementStatus.PENDING);
+        if (!existingPending.isEmpty()) {
+            debtSettlementRepository.deleteAll(existingPending);
+        }
+
         List<SimplifiedTransfer> simplified = debtSimplificationEngine.simplifyFromNetBalances(netBalances);
 
         List<DebtSettlementDto> settlementDtos = new ArrayList<>();
@@ -304,7 +322,191 @@ public class GroupSplitService {
         log.info("Successfully settled debt {} (code={}) via journal entry {}",
                 settlementId, settlement.getSettlementCode(), entryResponse.getId());
 
+        // Publish Domain Event for Real-Time SSE Broadcasting
+        if (eventPublisher != null) {
+            eventPublisher.publishEvent(new DebtSettledEvent(
+                    settlement.getGroup().getId(),
+                    settlement.getGroup().getShareToken(),
+                    settlement.getId(),
+                    settlement.getSettlementCode(),
+                    fromMember.getId(),
+                    toMember.getId(),
+                    amount,
+                    settlement.getCompletedAt()
+            ));
+        }
+
         return entryResponse;
+    }
+
+    @Transactional(readOnly = true)
+    public List<ExpenseGroup> getAllGroups() {
+        return expenseGroupRepository.findAll();
+    }
+
+    @Transactional(readOnly = true)
+    public List<ExpenseGroup> getGroupsForUser(UUID userId) {
+        return expenseGroupRepository.findByOwnerUserIdOrderByCreatedAtDesc(userId);
+    }
+
+    @Transactional(readOnly = true)
+    public ExpenseGroup getGroupByIdForUser(UUID id, UUID userId) {
+        return expenseGroupRepository.findByIdAndOwnerUserId(id, userId)
+                .orElseThrow(() -> new IllegalArgumentException("Không tìm thấy nhóm hoặc bạn không có quyền truy cập"));
+    }
+
+    @Transactional(readOnly = true)
+    public ExpenseGroup getGroupById(UUID id) {
+        return expenseGroupRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Expense group not found: " + id));
+    }
+
+    @Transactional(readOnly = true)
+    public ExpenseGroup getGroupByShareToken(String shareToken) {
+        return expenseGroupRepository.findByShareToken(shareToken)
+                .orElseThrow(() -> new IllegalArgumentException("Expense group not found for token: " + shareToken));
+    }
+
+    @Transactional(readOnly = true)
+    public List<GroupMember> getGroupMembers(UUID groupId) {
+        return groupMemberRepository.findByGroupId(groupId);
+    }
+
+    @Transactional(readOnly = true)
+    public List<GroupExpense> getGroupExpenses(UUID groupId) {
+        return groupExpenseRepository.findByGroupIdOrderByCreatedAtDesc(groupId);
+    }
+
+    @Transactional(readOnly = true)
+    public List<DebtSettlementDto> getExistingSettlements(UUID groupId) {
+        List<DebtSettlement> list = debtSettlementRepository.findByGroupIdOrderByCreatedAtDesc(groupId);
+        return list.stream()
+                .map(s -> DebtSettlementDto.builder()
+                        .id(s.getId())
+                        .fromMemberId(s.getFromMember().getId())
+                        .fromMemberName(s.getFromMember().getDisplayName())
+                        .toMemberId(s.getToMember().getId())
+                        .toMemberName(s.getToMember().getDisplayName())
+                        .toBankCode(s.getToMember().getBankCode())
+                        .toBankAccountNumber(s.getToMember().getBankAccountNumber())
+                        .amount(s.getAmount())
+                        .settlementCode(s.getSettlementCode())
+                        .status(s.getStatus().name())
+                        .vietQrUrl(buildVietQrUrl(s.getToMember(), s.getAmount(), s.getSettlementCode()))
+                        .build())
+                .toList();
+    }
+
+    @Transactional
+    public PublicGroupShareResponse getPublicGroupDetails(String shareToken) {
+        ExpenseGroup group = getGroupByShareToken(shareToken);
+        return buildGroupShareResponse(group);
+    }
+
+    @Transactional
+    public PublicGroupShareResponse getGroupDetails(UUID groupId) {
+        ExpenseGroup group = getGroupById(groupId);
+        return buildGroupShareResponse(group);
+    }
+
+    private PublicGroupShareResponse buildGroupShareResponse(ExpenseGroup group) {
+        List<GroupMember> members = groupMemberRepository.findByGroupId(group.getId());
+        List<GroupExpense> expenses = groupExpenseRepository.findByGroupIdOrderByCreatedAtDesc(group.getId());
+
+        Map<UUID, BigDecimal> netBalances = new HashMap<>();
+        List<GroupMemberDto> memberDtos = new ArrayList<>();
+
+        for (GroupMember m : members) {
+            Account account = accountRepository.findById(m.getMemberLedgerAccountId()).orElse(null);
+            BigDecimal netBal = (account != null && account.getCachedBalance() != null)
+                    ? account.getCachedBalance().negate()
+                    : BigDecimal.ZERO.setScale(4);
+
+            netBalances.put(m.getId(), netBal);
+
+            memberDtos.add(GroupMemberDto.builder()
+                    .id(m.getId())
+                    .displayName(m.getDisplayName())
+                    .isGuest(m.isGuest())
+                    .bankCode(m.getBankCode())
+                    .bankAccountNumber(m.getBankAccountNumber())
+                    .memberLedgerAccountId(m.getMemberLedgerAccountId())
+                    .netBalance(netBal)
+                    .build());
+        }
+
+        List<GroupExpenseDto> expenseDtos = new ArrayList<>();
+        for (GroupExpense exp : expenses) {
+            List<GroupExpenseShare> shares = groupExpenseShareRepository.findByGroupExpenseId(exp.getId());
+            List<GroupExpenseShareDto> shareDtos = shares.stream()
+                    .map(s -> GroupExpenseShareDto.builder()
+                            .memberId(s.getMember().getId())
+                            .memberName(s.getMember().getDisplayName())
+                            .shareAmount(s.getShareAmount())
+                            .rawWeight(s.getRawWeight())
+                            .build())
+                    .toList();
+
+            expenseDtos.add(GroupExpenseDto.builder()
+                    .id(exp.getId())
+                    .title(exp.getTitle())
+                    .totalAmount(exp.getTotalAmount())
+                    .splitStrategy(exp.getSplitStrategy().name())
+                    .paidByMemberId(exp.getPaidByMember().getId())
+                    .paidByMemberName(exp.getPaidByMember().getDisplayName())
+                    .createdAt(exp.getCreatedAt())
+                    .shares(shareDtos)
+                    .build());
+        }
+
+        List<DebtSettlementDto> settlements = getExistingSettlements(group.getId());
+        if (settlements.isEmpty() && !expenses.isEmpty()) {
+            settlements = generateSettlementPlan(group.getId());
+        }
+
+        return PublicGroupShareResponse.builder()
+                .groupId(group.getId())
+                .groupName(group.getName())
+                .currency(group.getCurrency())
+                .shareToken(group.getShareToken())
+                .simplifyDebts(group.isSimplifyDebts())
+                .createdAt(group.getCreatedAt())
+                .members(memberDtos)
+                .expenses(expenseDtos)
+                .netBalances(netBalances)
+                .settlements(settlements)
+                .build();
+    }
+
+    @Transactional
+    public DebtSettlementDto simulateWebhookSettlement(String shareToken, String settlementCode) {
+        ExpenseGroup group = getGroupByShareToken(shareToken);
+
+        DebtSettlement settlement = debtSettlementRepository.findBySettlementCode(settlementCode)
+                .orElseThrow(() -> new IllegalArgumentException("Settlement code not found: " + settlementCode));
+
+        if (!settlement.getGroup().getId().equals(group.getId())) {
+            throw new IllegalArgumentException("Settlement does not belong to this group");
+        }
+
+        if (settlement.getStatus() == SettlementStatus.PENDING) {
+            settleDebt(settlement.getId());
+            settlement = debtSettlementRepository.findById(settlement.getId()).orElseThrow();
+        }
+
+        return DebtSettlementDto.builder()
+                .id(settlement.getId())
+                .fromMemberId(settlement.getFromMember().getId())
+                .fromMemberName(settlement.getFromMember().getDisplayName())
+                .toMemberId(settlement.getToMember().getId())
+                .toMemberName(settlement.getToMember().getDisplayName())
+                .toBankCode(settlement.getToMember().getBankCode())
+                .toBankAccountNumber(settlement.getToMember().getBankAccountNumber())
+                .amount(settlement.getAmount())
+                .settlementCode(settlement.getSettlementCode())
+                .status(settlement.getStatus().name())
+                .vietQrUrl(buildVietQrUrl(settlement.getToMember(), settlement.getAmount(), settlement.getSettlementCode()))
+                .build();
     }
 
     private String buildVietQrUrl(GroupMember toMember, BigDecimal amount, String code) {

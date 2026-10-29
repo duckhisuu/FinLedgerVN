@@ -7,6 +7,7 @@ import lombok.*;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.UUID;
 
 @Getter
 @Setter
@@ -14,6 +15,14 @@ import java.util.List;
 @AllArgsConstructor
 @Builder
 public class RecordTransactionRequest {
+
+    private UUID userId;
+
+    private String entryType;
+
+    private UUID walletAccountId;
+
+    private UUID categoryAccountId;
 
     private Instant transactionDate;
 

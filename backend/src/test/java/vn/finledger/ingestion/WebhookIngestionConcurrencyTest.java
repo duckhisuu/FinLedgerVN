@@ -114,9 +114,7 @@ public class WebhookIngestionConcurrencyTest {
         }
 
         // Clean tables in reverse dependency order
-        jdbcTemplate.execute("DELETE FROM webhook_inbox_logs");
-        jdbcTemplate.execute("DELETE FROM categorization_rules");
-        jdbcTemplate.execute("DELETE FROM bank_account_mappings");
+        jdbcTemplate.execute("TRUNCATE TABLE debt_settlements, group_expense_shares, group_expenses, group_members, expense_groups, webhook_inbox_logs, categorization_rules, bank_account_mappings CASCADE;");
 
         jdbcTemplate.execute("ALTER TABLE journal_entries DISABLE TRIGGER trg_prevent_journal_entries_mutation");
         jdbcTemplate.execute("ALTER TABLE posting_legs DISABLE TRIGGER trg_prevent_posting_legs_mutation");

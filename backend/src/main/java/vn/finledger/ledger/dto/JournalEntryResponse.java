@@ -13,6 +13,10 @@ import java.util.UUID;
 @Builder
 public class JournalEntryResponse {
     private UUID id;
+    private UUID userId;
+    private String entryType;
+    private UUID walletAccountId;
+    private UUID categoryAccountId;
     private Instant transactionDate;
     private String description;
     private String referenceId;

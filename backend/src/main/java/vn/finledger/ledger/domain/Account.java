@@ -20,12 +20,18 @@ public class Account {
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
+    @Column(name = "user_id")
+    private UUID userId;
+
     @Column(nullable = false)
     private String name;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "account_type", nullable = false, length = 32)
     private AccountType accountType;
+
+    @Column(name = "account_subtype", length = 32)
+    private String accountSubtype;
 
     @Column(nullable = false, length = 3)
     @Builder.Default
@@ -38,6 +44,26 @@ public class Account {
     @Column(name = "allow_negative", nullable = false)
     @Builder.Default
     private boolean allowNegative = false;
+
+    @Column(length = 64)
+    private String icon;
+
+    @Column(length = 32)
+    private String color;
+
+    @Column(name = "bank_code", length = 32)
+    private String bankCode;
+
+    @Column(name = "account_number", length = 64)
+    private String accountNumber;
+
+    @Column(name = "include_in_total", nullable = false)
+    @Builder.Default
+    private boolean includeInTotal = true;
+
+    @Column(nullable = false)
+    @Builder.Default
+    private boolean archived = false;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     @Builder.Default

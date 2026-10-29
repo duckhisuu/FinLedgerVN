@@ -127,12 +127,14 @@ public class GroupSplitAndVietQrIntegrationTest {
                 .name("Default Suspense Expense")
                 .accountType(AccountType.EXPENSE)
                 .currency("VND")
+                .allowNegative(true)
                 .build());
 
         var suspenseRevenue = ledgerService.createAccount(CreateAccountRequest.builder()
                 .name("Default Suspense Revenue")
                 .accountType(AccountType.REVENUE)
                 .currency("VND")
+                .allowNegative(true)
                 .build());
 
         bankAccountMappingRepository.save(BankAccountMapping.builder()

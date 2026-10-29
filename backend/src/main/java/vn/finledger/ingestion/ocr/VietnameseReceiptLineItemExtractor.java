@@ -36,22 +36,38 @@ public class VietnameseReceiptLineItemExtractor {
             "^\\s*([0-9]+(?:[.,][0-9]+)?)\\s*(?:kg|g|lon|chai|hop|goi|cai|khay|bao|tui|ve)?\\s*[*xX]\\s*([0-9oO.,]{4,}(?:[đĐ]|VND|vnd)?)\\s*$"
     );
 
+    // KiotViet / POS format: "9,000   4   36,000" (unit price, quantity, total amount)
+    private static final Pattern FORMULA_PRICE_QTY_AMOUNT = Pattern.compile(
+            "^\\s*([0-9oO.,]{4,})\\s+([0-9]+(?:[.,][0-9]+)?)\\s+([0-9oO.,]{4,}(?:[đĐ]|VND|vnd)?)\\s*$"
+    );
+
     // Pure quantity token: e.g. "1", "2", "10"
     private static final Pattern PURE_QUANTITY_PATTERN = Pattern.compile(
             "^[0-9]+(?:[.,][0-9]+)?$"
     );
 
+    private static final Pattern PHONE_PATTERN = Pattern.compile(
+            ".*(?:0[35789]\\d{8}|02\\d{9}|0[1-9]\\d{2}[.\\s]?\\d{3}[.\\s]?\\d{3,4}|\\+84[35789]\\d{8}).*"
+    );
+
     private static final Set<String> FOOTER_KEYWORDS = Set.of(
-            "TONG CONG", "TONG TIEN", "THANH TOAN", "PHAI THU", "TONG PHAI TRA",
-            "TIEN MAT", "CHUYEN KHOAN", "TOTAL", "GRAND TOTAL", "AMOUNT DUE"
+            "TONG CONG", "TONG TIEN", "TONG TIN", "TIEN HANG", "TIN HANG",
+            "THANH TOAN", "THA TON", "PHAI THU", "TONG PHAI TRA",
+            "TIEN MAT", "CHUYEN KHOAN", "TOTAL", "GRAND TOTAL", "AMOUNT DUE",
+            "CHIET KHAU", "CHIT KHU", "GIAM GIA", "QUET MA", "CAM ON",
+            "HEN GAP LAI", "XIN CAM ON", "DONG CHAN"
     );
 
     private static final Set<String> HEADER_KEYWORDS = Set.of(
             "CONG TY", "WINCOMMERCE", "WINMART", "BACH HOA XANH", "CIRCLE K", "COOPMART",
-            "DIA CHI", "ADDRESS", "TEL", "SDT", "SO DT", "DT:", "MST", "MA SO THUE",
+            "DIA CHI", "ADDRESS", "TEL", "SDT", "SO DT", "DT:", "DT.", "MST", "MA SO THUE",
             "HOA DON", "PHIEU THANH TOAN", "THU NGAN", "CASHIER", "BAN IN", "SO PHIEU",
             "NGAY", "DATE", "GIO", "TIME", "STT", "TEN HANG", "SO LUONG", "DON GIA",
-            "THANH TIEN", "TEN SAN PHAM", "D.GIA", "T.TIEN", "SL"
+            "THANH TIEN", "TEN SAN PHAM", "D.GIA", "T.TIEN", "SL", "KIOTVIET", "KHACH LE",
+            "SO HD", "HOA DON TAM TINH", "DIEN THOAI", "DIENTHOAI", "D.THOAI", "D THOAI",
+            "DIN THOAI", "HOTLINE", "CSKH", "TAP HOA", "TAPHOA", "CUA HANG", "SHOP",
+            "KHACH HANG", "TEN KHACH", "BAN LE", "QUAY", "NHAN VIEN", "DON GLA", "THANH TLEN",
+            "DIA CHL"
     );
 
     /**
@@ -66,6 +82,7 @@ public class VietnameseReceiptLineItemExtractor {
         BigDecimal detectedTotalAmount = null;
         String merchantName = null;
         String pendingItemName = null;
+        boolean inFooterZone = false;
 
         for (int i = 0; i < rows.size(); i++) {
             ReconstructedReceiptRow row = rows.get(i);
@@ -77,27 +94,43 @@ public class VietnameseReceiptLineItemExtractor {
             String normalizedText = removeDiacritics(rowText).toUpperCase();
 
             // Detect merchant name from early header rows if possible
-            if (merchantName == null && i < 3) {
+            if (merchantName == null && i < 4) {
                 if (normalizedText.contains("WINMART") || normalizedText.contains("BACH HOA XANH")
-                        || normalizedText.contains("CIRCLE K") || normalizedText.contains("COOPMART")) {
-                    merchantName = rowText;
+                        || normalizedText.contains("CIRCLE K") || normalizedText.contains("COOPMART")
+                        || normalizedText.contains("TAP HOA") || normalizedText.contains("TAPHOA")) {
+                    merchantName = cleanMerchantName(rowText);
                 }
             }
 
             // 1. Zone Filtering: Check for Footer (Termination keywords)
-            if (isFooterRow(normalizedText)) {
-                log.debug("Encountered footer row: '{}'. Terminating item parsing.", rowText);
-                detectedTotalAmount = extractAmountFromRow(row);
-                // If not found directly, try parsing from the row text
-                if (detectedTotalAmount == null) {
-                    detectedTotalAmount = extractTrailingAmount(rowText);
+            if (inFooterZone || isFooterRow(normalizedText)) {
+                inFooterZone = true;
+                log.debug("In footer zone: '{}'", rowText);
+                pendingItemName = null;
+
+                // Ignore customer cash given / change returned rows
+                if (normalizedText.contains("KHACH DUA") || normalizedText.contains("TIEN THUA") || normalizedText.contains("TIEN THOI")) {
+                    continue;
                 }
-                // STOP extracting items immediately to avoid picking up Paid / Change / VAT lines
-                break;
+
+                BigDecimal amt = extractAmountFromRow(row);
+                if (amt == null) {
+                    amt = extractTrailingAmount(rowText);
+                }
+
+                if (amt != null && amt.compareTo(BigDecimal.ZERO) > 0) {
+                    if (normalizedText.contains("THANH TOAN") || normalizedText.contains("THA TON")
+                            || normalizedText.contains("PHAI THU") || normalizedText.contains("TONG CONG")) {
+                        detectedTotalAmount = amt;
+                    } else if (detectedTotalAmount == null) {
+                        detectedTotalAmount = amt;
+                    }
+                }
+                continue;
             }
 
             // 2. Zone Filtering: Check for Header keywords
-            if (isHeaderRow(normalizedText)) {
+            if (isHeaderRow(normalizedText, rowText)) {
                 log.debug("Skipping header row: '{}'", rowText);
                 pendingItemName = null;
                 continue;
@@ -172,6 +205,7 @@ public class VietnameseReceiptLineItemExtractor {
         String trimmed = rowText.trim();
         return FORMULA_QTY_PRICE_AMOUNT.matcher(trimmed).matches()
                 || FORMULA_SPACE_SEPARATED.matcher(trimmed).matches()
+                || FORMULA_PRICE_QTY_AMOUNT.matcher(trimmed).matches()
                 || FORMULA_QTY_X_AMOUNT.matcher(trimmed).matches()
                 || trimmed.matches("^\\s*[0-9]+(?:[.,][0-9]+)?\\s*(?:kg|g|lon|chai|hop|goi|cai|khay|bao|tui|ve)?\\s*[*xX].*");
     }
@@ -180,6 +214,12 @@ public class VietnameseReceiptLineItemExtractor {
      * Checks if row is a footer row marking the end of the item list.
      */
     private boolean isFooterRow(String normalizedText) {
+        if (normalizedText.startsWith("TONG ") || normalizedText.startsWith("TNG ")
+                || normalizedText.startsWith("TONG:") || normalizedText.startsWith("TÔNG ")
+                || normalizedText.startsWith("TONGCONG") || normalizedText.startsWith("THANH TOAN")
+                || normalizedText.startsWith("THA TON")) {
+            return true;
+        }
         for (String keyword : FOOTER_KEYWORDS) {
             if (normalizedText.contains(keyword)) {
                 return true;
@@ -189,9 +229,20 @@ public class VietnameseReceiptLineItemExtractor {
     }
 
     /**
-     * Checks if row is a header row (store info, address, column titles).
+     * Checks if row is a header row (store info, address, column titles, phone numbers).
      */
-    private boolean isHeaderRow(String normalizedText) {
+    private boolean isHeaderRow(String normalizedText, String rowText) {
+        if (PHONE_PATTERN.matcher(normalizedText).matches() || PHONE_PATTERN.matcher(rowText).matches()) {
+            return true;
+        }
+        if (normalizedText.startsWith("TAPHOA") || normalizedText.startsWith("TAP HOA")
+                || normalizedText.startsWith("CUA HANG") || normalizedText.startsWith("SIEU THI")
+                || normalizedText.startsWith("MINIMART")) {
+            return true;
+        }
+        if (rowText.trim().matches("^[A-Za-z0-9]{2,5}:?$")) {
+            return true;
+        }
         for (String keyword : HEADER_KEYWORDS) {
             if (normalizedText.contains(keyword)) {
                 return true;
@@ -273,7 +324,24 @@ public class VietnameseReceiptLineItemExtractor {
             }
         }
 
+        // Pattern 4: KiotViet / POS format "9,000 4 36,000" (UnitPrice, Qty, TotalAmount)
+        Matcher m4 = FORMULA_PRICE_QTY_AMOUNT.matcher(rowText);
+        if (m4.matches()) {
+            BigDecimal unitPrice = parseVietnameseAmount(m4.group(1));
+            BigDecimal qty = parseQuantity(m4.group(2));
+            BigDecimal amount = parseVietnameseAmount(m4.group(3));
+            if (amount != null && amount.compareTo(BigDecimal.ZERO) > 0) {
+                return ReceiptLineItemDto.builder()
+                        .productName(cleanProductName(productName))
+                        .quantity(qty)
+                        .unitPrice(unitPrice)
+                        .lineAmount(amount)
+                        .build();
+            }
+        }
+
         return null;
+
     }
 
     /**
@@ -435,10 +503,19 @@ public class VietnameseReceiptLineItemExtractor {
             return null;
         }
 
+        // Reject if token looks like a phone number: starts with 0 and length >= 9
+        if (digitsOnly.startsWith("0") && digitsOnly.length() >= 9) {
+            return null;
+        }
+
         try {
             BigDecimal amount = new BigDecimal(digitsOnly).setScale(4, RoundingMode.HALF_EVEN);
             // Minimum retail receipt amount in Vietnam is at least 1,000 VND
             if (amount.compareTo(new BigDecimal("1000")) < 0) {
+                return null;
+            }
+            // Retail item price threshold: reject absurd numbers (phone numbers without 0, barcode, invoice ids)
+            if (amount.compareTo(new BigDecimal("50000000")) > 0) {
                 return null;
             }
             return amount;
@@ -478,6 +555,14 @@ public class VietnameseReceiptLineItemExtractor {
 
     private boolean containsLetters(String text) {
         return text.chars().anyMatch(Character::isLetter);
+    }
+
+    private String cleanMerchantName(String raw) {
+        if (raw == null) {
+            return "Cửa hàng bán lẻ";
+        }
+        String cleaned = raw.replaceAll("(?i)\\s*(?:Đia|Địa|Dia)\\s*(?:chl|chi|chí).*$", "").trim();
+        return cleaned.isBlank() ? raw : cleaned;
     }
 
     private String cleanProductName(String name) {

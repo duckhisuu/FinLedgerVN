@@ -29,14 +29,15 @@ public class PaddleOcrRestClient implements OcrVisionClient {
             @Value("${ocr.worker.url:http://localhost:8081}") String ocrWorkerUrl) {
         this.ocrWorkerUrl = ocrWorkerUrl;
         SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
-        requestFactory.setConnectTimeout(Duration.ofSeconds(5));
-        requestFactory.setReadTimeout(Duration.ofSeconds(30));
+        requestFactory.setConnectTimeout(Duration.ofSeconds(10));
+        requestFactory.setReadTimeout(Duration.ofSeconds(120));
 
         this.restClient = RestClient.builder()
                 .baseUrl(ocrWorkerUrl)
                 .requestFactory(requestFactory)
                 .build();
     }
+
 
     @Override
     public List<OcrTextBox> extractTextBoxes(byte[] imageBytes, String filename) {

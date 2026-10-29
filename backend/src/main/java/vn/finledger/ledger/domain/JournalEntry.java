@@ -21,6 +21,18 @@ public class JournalEntry {
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
+    @Column(name = "user_id")
+    private UUID userId;
+
+    @Column(name = "entry_type", length = 32)
+    private String entryType;
+
+    @Column(name = "wallet_account_id")
+    private UUID walletAccountId;
+
+    @Column(name = "category_account_id")
+    private UUID categoryAccountId;
+
     @Column(name = "transaction_date", nullable = false)
     private Instant transactionDate;
 

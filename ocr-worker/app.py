@@ -1,3 +1,10 @@
+import os
+
+# Disable MKLDNN/oneDNN PIR instruction bug in PaddlePaddle 3.x
+os.environ["PADDLE_PDX_ENABLE_MKLDNN_BYDEFAULT"] = "0"
+os.environ["FLAGS_use_onednn"] = "0"
+os.environ["FLAGS_enable_pir_api"] = "0"
+
 import io
 import logging
 import cv2
@@ -18,15 +25,29 @@ def get_ocr_engine():
     if ocr_engine is None:
         try:
             logger.info("Initializing PaddleOCR with textline orientation...")
-            ocr_engine = PaddleOCR(lang="vi", use_textline_orientation=True)
+            ocr_engine = PaddleOCR(
+                lang="vi",
+                use_textline_orientation=True,
+                use_doc_unwarping=False,
+                use_doc_orientation_classify=False
+            )
         except Exception as e:
             logger.warning("PaddleOCR fallback initialization: %s", e)
-            ocr_engine = PaddleOCR(lang="vi")
+            try:
+                ocr_engine = PaddleOCR(lang="vi", use_doc_unwarping=False)
+            except Exception:
+                ocr_engine = PaddleOCR(lang="vi")
     return ocr_engine
+
+@app.on_event("startup")
+def startup_event():
+    logger.info("Pre-warming PaddleOCR engine on startup...")
+    get_ocr_engine()
 
 @app.get("/health")
 def health():
     return {"status": "UP", "service": "ocr-worker"}
+
 
 @app.post("/predict")
 async def predict(file: UploadFile = File(...)):
@@ -40,39 +61,73 @@ async def predict(file: UploadFile = File(...)):
         if img is None:
             raise HTTPException(status_code=400, detail="Could not decode image")
 
-        # Step 1: Preprocessing for faint thermal paper receipts
-        # Convert to grayscale
-        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-        # Gaussian blur to reduce high frequency noise
-        blurred = cv2.GaussianBlur(gray, (3, 3), 0)
-        # Adaptive thresholding for uneven thermal receipt contrast
-        thresh = cv2.adaptiveThreshold(
-            blurred, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2
-        )
+        # Ensure image has 3 color channels (BGR) for PaddleOCR deep learning models
+        if len(img.shape) == 2:
+            img = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
+        elif len(img.shape) == 3 and img.shape[2] == 4:
+            img = cv2.cvtColor(img, cv2.COLOR_BGRA2BGR)
 
-        # Step 2: Run PaddleOCR on preprocessed image
+        # Smart proportional downscale for large camera photos (> 1600px)
+        # Keeps text crystal clear while accelerating CPU inference by 5x-8x
+        h, w = img.shape[:2]
+        max_dim = max(h, w)
+        scale = 1.0
+        if max_dim > 1600:
+            scale = 1600.0 / max_dim
+            new_w = int(w * scale)
+            new_h = int(h * scale)
+            img = cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_AREA)
+
+        # Run PaddleOCR
         engine = get_ocr_engine()
-        results = engine.ocr(thresh)
+        results = engine.ocr(img)
 
         boxes = []
-        if results and results[0]:
-            for line in results[0]:
-                polygon = line[0]  # [[x1,y1],[x2,y2],[x3,y3],[x4,y4]]
-                text_info = line[1]
-                text = text_info[0]
-                confidence = float(text_info[1])
+        if results and len(results) > 0:
+            first_res = results[0]
+            # Format 1: PaddleOCR 3.x / PaddleX (OCRResult dict-like)
+            if isinstance(first_res, dict):
+                texts = first_res.get("rec_texts", [])
+                scores = first_res.get("rec_scores", [])
+                polys = first_res.get("rec_polys", first_res.get("dt_polys", []))
+                for i in range(len(texts)):
+                    text = texts[i]
+                    confidence = float(scores[i]) if i < len(scores) else 1.0
+                    poly = polys[i] if i < len(polys) else []
 
-                x_coords = [point[0] for point in polygon]
-                y_coords = [point[1] for point in polygon]
+                    if len(poly) > 0:
+                        x_coords = [float(point[0]) / scale for point in poly]
+                        y_coords = [float(point[1]) / scale for point in poly]
+                        boxes.append({
+                            "text": str(text),
+                            "xMin": float(min(x_coords)),
+                            "yMin": float(min(y_coords)),
+                            "xMax": float(max(x_coords)),
+                            "yMax": float(max(y_coords)),
+                            "confidence": confidence
+                        })
+            # Format 2: PaddleOCR 2.x (list of [polygon, (text, score)])
+            elif isinstance(first_res, list):
+                for line in first_res:
+                    if not line or len(line) < 2:
+                        continue
+                    polygon = line[0]
+                    text_info = line[1]
+                    text = text_info[0] if isinstance(text_info, (list, tuple)) else str(text_info)
+                    confidence = float(text_info[1]) if isinstance(text_info, (list, tuple)) and len(text_info) > 1 else 1.0
 
-                boxes.append({
-                    "text": text,
-                    "xMin": float(min(x_coords)),
-                    "yMin": float(min(y_coords)),
-                    "xMax": float(max(x_coords)),
-                    "yMax": float(max(y_coords)),
-                    "confidence": confidence
-                })
+                    x_coords = [float(point[0]) / scale for point in polygon]
+                    y_coords = [float(point[1]) / scale for point in polygon]
+
+                    boxes.append({
+                        "text": str(text),
+                        "xMin": float(min(x_coords)),
+                        "yMin": float(min(y_coords)),
+                        "xMax": float(max(x_coords)),
+                        "yMax": float(max(y_coords)),
+                        "confidence": confidence
+                    })
+
 
         logger.info(f"Processed image '{file.filename}': detected {len(boxes)} text boxes")
         return boxes

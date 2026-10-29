@@ -19,4 +19,6 @@ public class ReceiptLineItemDto {
     private BigDecimal quantity;
     private BigDecimal unitPrice;
     private BigDecimal lineAmount;
+    private String category;
+    private BigDecimal confidence;
 }

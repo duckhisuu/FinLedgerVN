@@ -9,10 +9,12 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.ico', 'robots.txt'],
       manifest: {
-        name: 'FinLedger VN',
+        name: 'FinLedger — Quản lý Tài chính Cá nhân',
         short_name: 'FinLedger',
-        description: 'Automated double-entry bookkeeping and group debt simplification for Vietnam',
-        theme_color: '#0f172a',
+        description: 'Ứng dụng quản lý thu chi, ngân sách, ví cá nhân và chia tiền nhóm thông minh',
+        theme_color: '#090c10',
+        background_color: '#090c10',
+        display: 'standalone',
         icons: [
           {
             src: '/pwa-192x192.png',

@@ -91,8 +91,9 @@ public class LedgerService {
 
             if (!account.isAllowNegative() && newBalance.compareTo(BigDecimal.ZERO) < 0) {
                 throw new InsufficientFundsException(
-                        String.format("Account %s (%s) has insufficient funds. Current: %s, delta: %s, resulting: %s",
-                                account.getId(), account.getName(), account.getCachedBalance(), delta, newBalance));
+                        String.format("Số dư ví \"%s\" không đủ để thực hiện giao dịch (Hiện có: %s, Cần chi: %s)",
+                                account.getName(), account.getCachedBalance().stripTrailingZeros().toPlainString(),
+                                delta.abs().stripTrailingZeros().toPlainString()));
             }
 
             account.setCachedBalance(newBalance);
@@ -101,6 +102,10 @@ public class LedgerService {
 
         // 6. Persist immutable JournalEntry and PostingLegs
         JournalEntry journalEntry = JournalEntry.builder()
+                .userId(request.getUserId())
+                .entryType(request.getEntryType())
+                .walletAccountId(request.getWalletAccountId())
+                .categoryAccountId(request.getCategoryAccountId())
                 .transactionDate(request.getTransactionDate() != null ? request.getTransactionDate() : Instant.now())
                 .description(request.getDescription())
                 .referenceId(request.getReferenceId())
@@ -168,8 +173,12 @@ public class LedgerService {
 
         // Persist reversing JournalEntry pointing to original via reversal_of_id
         JournalEntry reversalEntry = JournalEntry.builder()
+                .userId(original.getUserId())
+                .entryType("REVERSAL")
+                .walletAccountId(original.getWalletAccountId())
+                .categoryAccountId(original.getCategoryAccountId())
                 .transactionDate(Instant.now())
-                .description("REVERSAL: " + original.getDescription() + (reason != null && !reason.isBlank() ? " (" + reason + ")" : ""))
+                .description("Hủy giao dịch: " + original.getDescription() + (reason != null && !reason.isBlank() ? " (" + reason + ")" : ""))
                 .reversalOfId(journalEntryId)
                 .build();
 
@@ -195,11 +204,19 @@ public class LedgerService {
                 : BigDecimal.ZERO.setScale(4, RoundingMode.HALF_EVEN);
 
         Account account = Account.builder()
+                .userId(request.getUserId())
                 .name(request.getName())
                 .accountType(request.getAccountType())
+                .accountSubtype(request.getAccountSubtype())
                 .currency(request.getCurrency() != null ? request.getCurrency() : "VND")
                 .cachedBalance(initialBal)
                 .allowNegative(request.isAllowNegative())
+                .icon(request.getIcon())
+                .color(request.getColor())
+                .bankCode(request.getBankCode())
+                .accountNumber(request.getAccountNumber())
+                .includeInTotal(request.isIncludeInTotal())
+                .archived(false)
                 .build();
 
         Account saved = accountRepository.save(account);
@@ -221,13 +238,20 @@ public class LedgerService {
     }
 
     @Transactional(readOnly = true)
+    public List<JournalEntryResponse> getAllJournalEntries() {
+        return journalEntryRepository.findAllByOrderByCreatedAtDesc().stream()
+                .map(this::mapToJournalEntryResponse)
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
     public JournalEntryResponse getJournalEntry(UUID id) {
         JournalEntry entry = journalEntryRepository.findById(id)
                 .orElseThrow(() -> new TransactionNotFoundException(id));
         return mapToJournalEntryResponse(entry);
     }
 
-    private JournalEntryResponse mapToJournalEntryResponse(JournalEntry entry) {
+    public JournalEntryResponse mapToJournalEntryResponse(JournalEntry entry) {
         List<PostingLegResponse> legs = entry.getPostingLegs().stream()
                 .map(leg -> PostingLegResponse.builder()
                         .id(leg.getId())
@@ -240,6 +264,10 @@ public class LedgerService {
 
         return JournalEntryResponse.builder()
                 .id(entry.getId())
+                .userId(entry.getUserId())
+                .entryType(entry.getEntryType())
+                .walletAccountId(entry.getWalletAccountId())
+                .categoryAccountId(entry.getCategoryAccountId())
                 .transactionDate(entry.getTransactionDate())
                 .description(entry.getDescription())
                 .referenceId(entry.getReferenceId())
@@ -249,14 +277,22 @@ public class LedgerService {
                 .build();
     }
 
-    private AccountResponse mapToAccountResponse(Account account) {
+    public AccountResponse mapToAccountResponse(Account account) {
         return AccountResponse.builder()
                 .id(account.getId())
+                .userId(account.getUserId())
                 .name(account.getName())
                 .accountType(account.getAccountType())
+                .accountSubtype(account.getAccountSubtype())
                 .currency(account.getCurrency())
                 .cachedBalance(account.getCachedBalance())
                 .allowNegative(account.isAllowNegative())
+                .icon(account.getIcon())
+                .color(account.getColor())
+                .bankCode(account.getBankCode())
+                .accountNumber(account.getAccountNumber())
+                .includeInTotal(account.isIncludeInTotal())
+                .archived(account.isArchived())
                 .createdAt(account.getCreatedAt())
                 .updatedAt(account.getUpdatedAt())
                 .build();

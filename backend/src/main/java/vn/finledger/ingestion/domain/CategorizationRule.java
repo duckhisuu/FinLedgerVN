@@ -19,6 +19,9 @@ public class CategorizationRule {
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
+    @Column(name = "user_id")
+    private UUID userId;
+
     @Column(name = "keyword_pattern", nullable = false)
     private String keywordPattern;
 

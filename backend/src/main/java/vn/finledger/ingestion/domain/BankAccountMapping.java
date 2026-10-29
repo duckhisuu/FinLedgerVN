@@ -19,6 +19,9 @@ public class BankAccountMapping {
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
+    @Column(name = "user_id")
+    private UUID userId;
+
     @Column(name = "bank_account_number", nullable = false, unique = true, length = 64)
     private String bankAccountNumber;
 

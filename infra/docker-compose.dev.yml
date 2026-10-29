@@ -43,6 +43,9 @@ services:
       - "8081:8081"
     environment:
       - PORT=8081
+      - PADDLE_PDX_ENABLE_MKLDNN_BYDEFAULT=0
+      - FLAGS_use_onednn=0
+      - FLAGS_enable_pir_api=0
 
 volumes:
   postgres_data:

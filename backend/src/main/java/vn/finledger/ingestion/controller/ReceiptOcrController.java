@@ -20,6 +20,7 @@ import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 
 /**
  * Controller for receipt image upload, OCR processing, and automated ledger ingestion.
@@ -39,6 +40,7 @@ public class ReceiptOcrController {
     private final SpatialReceiptLayoutParser spatialReceiptLayoutParser;
     private final VietnameseReceiptLineItemExtractor receiptLineItemExtractor;
     private final ReceiptSplitIngestionService receiptSplitIngestionService;
+    private final vn.finledger.ingestion.service.LocalTrainableCategorizer localTrainableCategorizer;
 
     @PostMapping(value = "/upload-image", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<?> uploadReceiptImage(
@@ -97,6 +99,36 @@ public class ReceiptOcrController {
             log.error("Internal error processing receipt OCR: {}", e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(Map.of("error", "Failed to process receipt image: " + e.getMessage()));
+        }
+    }
+
+    /**
+     * Active Learning feedback: retrains local N-gram categorizer in <10ms.
+     */
+    @PostMapping("/feedback")
+    public ResponseEntity<?> provideFeedback(@RequestBody Map<String, Object> body) {
+        String productName = (String) body.get("productName");
+        String accountIdStr = (String) body.get("targetAccountId");
+
+        if (productName == null || productName.isBlank() || accountIdStr == null || accountIdStr.isBlank()) {
+            return ResponseEntity.badRequest().body(Map.of("error", "productName and targetAccountId are required"));
+        }
+
+        try {
+            UUID accountId = UUID.fromString(accountIdStr);
+            long start = System.currentTimeMillis();
+            localTrainableCategorizer.train(productName, accountId);
+            long elapsed = System.currentTimeMillis() - start;
+
+            return ResponseEntity.ok(Map.of(
+                    "status", "TRAINED",
+                    "productName", productName,
+                    "targetAccountId", accountIdStr,
+                    "elapsedMs", elapsed,
+                    "message", "Model đã học mẫu mới!"
+            ));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Invalid account UUID: " + accountIdStr));
         }
     }
 }

@@ -71,6 +71,17 @@ public class ReceiptSplitIngestionService {
             CategorizationResult catResult = localTrainableCategorizer.categorizeItem(
                     item.getProductName(), mapping);
 
+            item.setConfidence(catResult.getConfidenceScore());
+            String cat = "FOOD";
+            if (catResult.getMatchedRuleOrReason() != null) {
+                if (catResult.getMatchedRuleOrReason().contains("HOUSEHOLD")) {
+                    cat = "HOUSEHOLD";
+                } else if (catResult.getMatchedRuleOrReason().contains("HEALTH")) {
+                    cat = "HEALTH";
+                }
+            }
+            item.setCategory(cat);
+
             postingLegs.add(PostingLegRequest.builder()
                     .accountId(catResult.getTargetAccountId())
                     .amount(itemAmount) // Positive for Expense Debit

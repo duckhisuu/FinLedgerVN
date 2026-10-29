@@ -130,6 +130,10 @@ public class BankWebhookIngestionService {
             }
 
             RecordTransactionRequest recordRequest = RecordTransactionRequest.builder()
+                    .userId(mapping.getUserId())
+                    .entryType("IN".equalsIgnoreCase(transferType) ? "INCOME" : "EXPENSE")
+                    .walletAccountId(mapping.getLedgerAccountId())
+                    .categoryAccountId(counterpartyAccountId)
                     .transactionDate(Instant.now())
                     .description(description)
                     .referenceId(referenceId)

@@ -314,4 +314,85 @@ public class SpatialReceiptOcrParserTest {
                 .setScale(4, RoundingMode.HALF_EVEN);
         assertThat(expenseDebits).isEqualByComparingTo(new BigDecimal("350000.0000"));
     }
+
+    @Test
+    @DisplayName("Test 5 - KiotViet POS Receipt: Filters phone number, extracts 3-column items, and separates footer totals")
+    void testKiotVietReceiptExtraction() {
+        // 36 real OCR text boxes from the user's KiotViet grocery receipt
+        List<OcrTextBox> boxes = List.of(
+                new OcrTextBox("taphoaa83", 281, 64, 389, 97, 1.00),
+                new OcrTextBox("Điên thoai: 0912259491", 221, 88, 452, 142, 0.95),
+                new OcrTextBox("Đia chl:--", 285, 79, 389, 113, 0.88),
+                new OcrTextBox("HÓA DO'N TAM TÍNH", 221, 132, 456, 181, 0.97),
+                new OcrTextBox("Só HD: Hóa đon 7", 249, 161, 431, 200, 0.98),
+                new OcrTextBox("Ngày 22 tháng 01 năm 2026", 205, 185, 479, 228, 0.97),
+                new OcrTextBox("g: Khách lě", 185, 229, 305, 260, 0.98),
+                new OcrTextBox("CCD:", 127, 305, 185, 333, 0.95),
+                new OcrTextBox("Don glá", 72, 364, 169, 395, 0.96),
+                new OcrTextBox("SL", 376, 374, 411, 400, 1.00),
+                new OcrTextBox("Thành tlèn", 470, 377, 588, 411, 0.97),
+                new OcrTextBox("Sa Té Tôm Thun Phát 85gr (108c/t)", 72, 400, 490, 445, 0.98),
+                new OcrTextBox("9,000", 69, 440, 135, 468, 1.00),
+                new OcrTextBox("4", 393, 452, 414, 477, 1.00),
+                new OcrTextBox("36,000", 518, 456, 593, 485, 0.98),
+                new OcrTextBox("Turo'ng Ót Chin-Su 500Gr (12c/t)", 67, 477, 447, 522, 0.97),
+                new OcrTextBox("30,000", 64, 518, 144, 547, 1.00),
+                new OcrTextBox("2", 394, 529, 414, 555, 1.00),
+                new OcrTextBox("60,000", 521, 535, 597, 563, 1.00),
+                new OcrTextBox("Låu Thái Aji-Quick 50Gr (60g/t)", 61, 556, 430, 603, 0.98),
+                new OcrTextBox("8,000", 56, 599, 127, 630, 1.00),
+                new OcrTextBox("6", 394, 612, 414, 638, 1.00),
+                new OcrTextBox("48,000", 521, 615, 600, 645, 1.00),
+                new OcrTextBox("Giáy An AL Airline 0001 (14b/t) (DMV)", 57, 640, 508, 690, 0.97),
+                new OcrTextBox("28,000", 51, 686, 136, 719, 1.00),
+                new OcrTextBox("2", 393, 698, 413, 724, 1.00),
+                new OcrTextBox("56,000", 521, 699, 600, 730, 0.94),
+                new OcrTextBox("Tồng tin hàng:", 235, 762, 423, 801, 0.97),
+                new OcrTextBox("200,000", 507, 771, 595, 800, 1.00),
+                new OcrTextBox("Chit khu :", 276, 802, 420, 837, 0.99),
+                new OcrTextBox("0", 574, 812, 592, 835, 1.00),
+                new OcrTextBox("Tóng thanh toán:", 214, 841, 417, 876, 0.99),
+                new OcrTextBox("200,000", 500, 846, 589, 874, 1.00),
+                new OcrTextBox("(Hai trăm nghin đng chǎn)", 44, 882, 348, 912, 0.94),
+                new OcrTextBox("Quét mà thanh toán", 204, 919, 428, 940, 0.96),
+                new OcrTextBox("Căm an và hęn găp lail", 191, 964, 437, 989, 0.85)
+        );
+
+        // 1. Spatial Parsing
+        List<ReconstructedReceiptRow> rows = spatialParser.parse(boxes);
+
+        // 2. Extractor
+        ParsedReceiptResult parsed = lineItemExtractor.extract(rows);
+
+        // 3. Verify exactly 4 products extracted, no phone number and no footer lines
+        assertThat(parsed.getLineItems()).hasSize(4);
+
+        ReceiptLineItemDto item1 = parsed.getLineItems().get(0);
+        assertThat(item1.getProductName()).contains("Sa Té Tôm");
+        assertThat(item1.getQuantity()).isEqualByComparingTo(new BigDecimal("4"));
+        assertThat(item1.getUnitPrice()).isEqualByComparingTo(new BigDecimal("9000"));
+        assertThat(item1.getLineAmount()).isEqualByComparingTo(new BigDecimal("36000"));
+
+        ReceiptLineItemDto item2 = parsed.getLineItems().get(1);
+        assertThat(item2.getProductName()).contains("Chin-Su");
+        assertThat(item2.getQuantity()).isEqualByComparingTo(new BigDecimal("2"));
+        assertThat(item2.getUnitPrice()).isEqualByComparingTo(new BigDecimal("30000"));
+        assertThat(item2.getLineAmount()).isEqualByComparingTo(new BigDecimal("60000"));
+
+        ReceiptLineItemDto item3 = parsed.getLineItems().get(2);
+        assertThat(item3.getProductName()).contains("Aji-Quick");
+        assertThat(item3.getQuantity()).isEqualByComparingTo(new BigDecimal("6"));
+        assertThat(item3.getUnitPrice()).isEqualByComparingTo(new BigDecimal("8000"));
+        assertThat(item3.getLineAmount()).isEqualByComparingTo(new BigDecimal("48000"));
+
+        ReceiptLineItemDto item4 = parsed.getLineItems().get(3);
+        assertThat(item4.getProductName()).contains("Airline");
+        assertThat(item4.getQuantity()).isEqualByComparingTo(new BigDecimal("2"));
+        assertThat(item4.getUnitPrice()).isEqualByComparingTo(new BigDecimal("28000"));
+        assertThat(item4.getLineAmount()).isEqualByComparingTo(new BigDecimal("56000"));
+
+        // 4. Verify Total & Calculated sum equal 200,000 VND
+        assertThat(parsed.getCalculatedSumAmount()).isEqualByComparingTo(new BigDecimal("200000"));
+        assertThat(parsed.getDetectedTotalAmount()).isEqualByComparingTo(new BigDecimal("200000"));
+    }
 }
