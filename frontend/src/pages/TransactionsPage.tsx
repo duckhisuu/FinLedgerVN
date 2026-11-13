@@ -18,6 +18,7 @@ import {
 } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { CategoryIcon } from '../components/CategoryIcon';
+import { RichEmptyState } from '../components/ui/RichEmptyState';
 import {
   formatDateHeaderVi,
   formatSignedVnd,
@@ -149,7 +150,7 @@ export function TransactionsPage() {
       </div>
 
       {/* Filters Bar */}
-      <div className="bg-[#141923] border border-white/[0.06] rounded-2xl p-4 space-y-3">
+      <div className="bento-card p-4 space-y-3">
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
           {/* Month Navigator */}
           <div className="flex items-center justify-between sm:justify-start gap-2 bg-[#0c1017] border border-white/[0.06] rounded-xl px-2 py-1.5">
@@ -271,23 +272,21 @@ export function TransactionsPage() {
           <Loader2 className="w-6 h-6 animate-spin text-[#22c55e]" />
         </div>
       ) : groupedDays.length === 0 ? (
-        <div className="bg-[#141923] border border-white/[0.06] rounded-2xl py-16 px-4 text-center space-y-3">
-          <p className="text-sm text-slate-400">
-            Không có giao dịch nào trong khoảng thời gian này.
-          </p>
-          <button
-            onClick={() => openTransactionModal({ mode: 'EXPENSE' })}
-            className="px-4 py-2 rounded-xl bg-white/[0.06] hover:bg-white/[0.1] text-xs font-semibold text-[#22c55e]"
-          >
-            + Ghi chép giao dịch ngay
-          </button>
+        <div className="bento-card py-10 px-4 text-center">
+          <RichEmptyState
+            variant="bars"
+            title="Không có giao dịch nào trong khoảng thời gian này"
+            description="Hãy ghi nhận các khoản thu chi hằng ngày hoặc hóa đơn để theo dõi dòng tiền chính xác"
+            actionLabel="+ Ghi chép giao dịch ngay"
+            onAction={() => openTransactionModal({ mode: 'EXPENSE' })}
+          />
         </div>
       ) : (
         <div className="space-y-4">
           {groupedDays.map((group) => (
             <div
               key={group.label}
-              className="bg-[#141923] border border-white/[0.06] rounded-2xl overflow-hidden"
+              className="bento-card overflow-hidden"
             >
               {/* Day Header */}
               <div className="px-4 sm:px-5 py-2.5 bg-[#10141d] border-b border-white/[0.05] flex items-center justify-between">

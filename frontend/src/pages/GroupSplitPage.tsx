@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  Users,
   Plus,
   UserPlus,
   Share2,
@@ -16,6 +15,7 @@ import {
   PublicGroupShareResponse,
   groupsApi,
 } from '../api/client';
+import { RichEmptyState } from '../components/ui/RichEmptyState';
 import { formatVnd } from '../utils/format';
 
 const VN_BANKS = [
@@ -234,25 +234,19 @@ export function GroupSplitPage() {
           <Loader2 className="w-6 h-6 animate-spin text-[#22c55e]" />
         </div>
       ) : !detail ? (
-        <div className="bg-[#141923] border border-white/[0.06] rounded-2xl py-16 px-4 text-center space-y-3">
-          <Users className="w-10 h-10 text-slate-500 mx-auto" />
-          <p className="text-sm font-medium text-slate-200">
-            Bạn chưa có nhóm chia tiền nào
-          </p>
-          <p className="text-xs text-slate-400 max-w-md mx-auto">
-            Tạo nhóm cho chuyến du lịch, bữa ăn chung hoặc chi tiêu phòng trọ để tự động tính toán ai cần chuyển khoản cho ai.
-          </p>
-          <button
-            onClick={() => setShowGroupModal(true)}
-            className="px-4 py-2.5 rounded-xl bg-[#22c55e] text-slate-950 font-semibold text-xs"
-          >
-            + Tạo nhóm đầu tiên
-          </button>
+        <div className="bento-card py-10 px-4 text-center">
+          <RichEmptyState
+            variant="donut"
+            title="Bạn chưa có nhóm chia tiền nào"
+            description="Tạo nhóm cho chuyến du lịch, ăn uống chung hoặc chi tiêu phòng trọ để hệ thống tự động tối giản số lượt chuyển tiền"
+            actionLabel="+ Tạo nhóm đầu tiên"
+            onAction={() => setShowGroupModal(true)}
+          />
         </div>
       ) : (
         <div className="space-y-5">
           {/* Group Action Bar */}
-          <div className="bg-[#141923] border border-white/[0.06] rounded-2xl p-4 sm:p-5 flex flex-wrap items-center justify-between gap-3">
+          <div className="bento-card p-4 sm:p-5 flex flex-wrap items-center justify-between gap-3">
             <div>
               <h2 className="text-lg font-bold text-white">{detail.groupName}</h2>
               <p className="text-xs text-slate-400 mt-0.5">
@@ -301,7 +295,7 @@ export function GroupSplitPage() {
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
             {/* Members & Balances */}
-            <section className="bg-[#141923] border border-white/[0.06] rounded-2xl p-5 space-y-3">
+            <section className="bento-card p-5 space-y-3">
               <h3 className="text-sm font-bold text-white">Số dư công nợ từng người</h3>
               {detail.members.length === 0 ? (
                 <p className="text-xs text-slate-400 py-6 text-center">
@@ -343,7 +337,7 @@ export function GroupSplitPage() {
             </section>
 
             {/* Settlements Plan */}
-            <section className="bg-[#141923] border border-white/[0.06] rounded-2xl p-5 space-y-3">
+            <section className="bento-card p-5 space-y-3">
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-bold text-white">Đề xuất thanh toán gọn nhất</h3>
                 <button
@@ -398,7 +392,7 @@ export function GroupSplitPage() {
           </div>
 
           {/* Group Expenses History */}
-          <section className="bg-[#141923] border border-white/[0.06] rounded-2xl p-5 space-y-3">
+          <section className="bento-card p-5 space-y-3">
             <h3 className="text-sm font-bold text-white">Lịch sử chi tiêu chung</h3>
             {detail.expenses.length === 0 ? (
               <p className="text-xs text-slate-400 py-8 text-center">

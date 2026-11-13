@@ -20,6 +20,7 @@ import {
 } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { CategoryIcon } from '../components/CategoryIcon';
+import { AnimatedCurrency } from '../components/ui/AnimatedCurrency';
 import { formatCompactVnd, formatSignedVnd, formatVnd } from '../utils/format';
 
 export function HomePage() {
@@ -101,9 +102,11 @@ export function HomePage() {
       <div className="flex items-start justify-between gap-4 relative">
         <div>
           <div className="flex items-center gap-2.5">
-            <h1 className="text-2xl sm:text-3xl font-extrabold mono-num tracking-tight text-white">
-              {formatVnd(data.totalBalance, hideBalance)}
-            </h1>
+            <AnimatedCurrency
+              value={data.totalBalance}
+              hideBalance={hideBalance}
+              className="text-2xl sm:text-3xl font-extrabold text-white"
+            />
             <button
               onClick={toggleHideBalance}
               aria-label="Ẩn/Hiện số dư"
@@ -208,7 +211,7 @@ export function HomePage() {
       </div>
 
       {/* 2. MY WALLETS CARD */}
-      <section className="bg-[#141923] border border-white/[0.06] rounded-2xl overflow-hidden">
+      <section className="bento-card overflow-hidden">
         <div className="px-4 sm:px-5 py-3.5 flex items-center justify-between border-b border-white/[0.05]">
           <h2 className="text-sm font-bold text-white">Ví của tôi</h2>
           <Link
@@ -271,7 +274,7 @@ export function HomePage() {
           </Link>
         </div>
 
-        <div className="bg-[#141923] border border-white/[0.06] rounded-2xl p-4 sm:p-5">
+        <div className="bento-card p-4 sm:p-5">
           {/* Two Top Tabs: Total spent | Total income */}
           <div className="grid grid-cols-2 border-b border-white/[0.07]">
             <button
@@ -283,9 +286,13 @@ export function HomePage() {
                 }`}
             >
               <p className="text-xs text-slate-400">Tổng đã chi</p>
-              <p className="text-base sm:text-lg font-bold mono-num text-rose-400 mt-0.5">
-                {formatVnd(data.monthSpent, hideBalance)}
-              </p>
+              <div className="mt-0.5">
+                <AnimatedCurrency
+                  value={data.monthSpent}
+                  hideBalance={hideBalance}
+                  className="text-base sm:text-lg font-bold text-rose-400"
+                />
+              </div>
             </button>
 
             <button
@@ -297,9 +304,13 @@ export function HomePage() {
                 }`}
             >
               <p className="text-xs text-slate-400">Tổng thu nhập</p>
-              <p className="text-base sm:text-lg font-bold mono-num text-sky-400 mt-0.5">
-                {formatVnd(data.monthIncome, hideBalance)}
-              </p>
+              <div className="mt-0.5">
+                <AnimatedCurrency
+                  value={data.monthIncome}
+                  hideBalance={hideBalance}
+                  className="text-base sm:text-lg font-bold text-sky-400"
+                />
+              </div>
             </button>
           </div>
 
@@ -414,7 +425,7 @@ export function HomePage() {
             </Link>
           </div>
 
-          <div className="bg-[#141923] border border-white/[0.06] rounded-2xl p-4 sm:p-5">
+          <div className="bento-card p-4 sm:p-5">
             {/* Week | Month Pill Switcher (exact match to Screenshot 2) */}
             <div className="grid grid-cols-2 p-1 rounded-full bg-[#0c1017] border border-white/[0.05] mb-4">
               <button
@@ -492,7 +503,7 @@ export function HomePage() {
             </Link>
           </div>
 
-          <div className="bg-[#141923] border border-white/[0.06] rounded-2xl overflow-hidden">
+          <div className="bento-card overflow-hidden">
             {data.recentTransactions.length === 0 ? (
               <div className="py-12 px-4 text-center">
                 <p className="text-xs sm:text-sm text-slate-400">

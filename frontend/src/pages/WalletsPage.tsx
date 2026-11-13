@@ -11,7 +11,7 @@ import {
 import { Wallet, WalletsSummary, financeApi } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { CategoryIcon, AVAILABLE_COLORS } from '../components/CategoryIcon';
-import { formatVnd } from '../utils/format';
+import { AnimatedCurrency } from '../components/ui/AnimatedCurrency';
 
 const WALLET_TYPES = [
   { id: 'CASH', label: 'Tiền mặt', icon: 'wallet', defaultColor: '#f97316' },
@@ -185,24 +185,36 @@ export function WalletsPage() {
 
       {/* Overview Totals */}
       {summary && (
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <div className="bg-[#141923] border border-white/[0.06] rounded-2xl p-4">
-            <p className="text-xs text-slate-400">Tổng số dư ròng</p>
-            <p className="text-xl font-extrabold mono-num text-white mt-1">
-              {formatVnd(summary.totalBalance, hideBalance)}
-            </p>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="bento-card p-5">
+            <p className="text-xs font-medium text-slate-400">Tổng số dư ròng</p>
+            <div className="mt-1.5">
+              <AnimatedCurrency
+                value={summary.totalBalance}
+                hideBalance={hideBalance}
+                className="text-2xl font-bold text-white"
+              />
+            </div>
           </div>
-          <div className="bg-[#141923] border border-white/[0.06] rounded-2xl p-4">
-            <p className="text-xs text-slate-400">Tổng tài sản khả dụng</p>
-            <p className="text-xl font-extrabold mono-num text-[#22c55e] mt-1">
-              {formatVnd(summary.totalAssets, hideBalance)}
-            </p>
+          <div className="bento-card p-5">
+            <p className="text-xs font-medium text-slate-400">Tổng tài sản khả dụng</p>
+            <div className="mt-1.5">
+              <AnimatedCurrency
+                value={summary.totalAssets}
+                hideBalance={hideBalance}
+                className="text-2xl font-bold text-emerald-400"
+              />
+            </div>
           </div>
-          <div className="bg-[#141923] border border-white/[0.06] rounded-2xl p-4">
-            <p className="text-xs text-slate-400">Dư nợ thẻ / Thấu chi</p>
-            <p className="text-xl font-extrabold mono-num text-rose-400 mt-1">
-              {formatVnd(summary.totalCreditDebt, hideBalance)}
-            </p>
+          <div className="bento-card p-5">
+            <p className="text-xs font-medium text-slate-400">Dư nợ thẻ / Thấu chi</p>
+            <div className="mt-1.5">
+              <AnimatedCurrency
+                value={summary.totalCreditDebt}
+                hideBalance={hideBalance}
+                className="text-2xl font-bold text-rose-400"
+              />
+            </div>
           </div>
         </div>
       )}
@@ -220,7 +232,7 @@ export function WalletsPage() {
             return (
               <div
                 key={w.id}
-                className="bg-[#141923] border border-white/[0.06] rounded-2xl p-5 flex flex-col justify-between gap-4"
+                className="bento-card p-5 flex flex-col justify-between gap-4"
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-center gap-3 min-w-0">
@@ -260,13 +272,15 @@ export function WalletsPage() {
                 <div className="pt-3 border-t border-white/[0.05] flex items-end justify-between">
                   <div>
                     <p className="text-[11px] text-slate-400">Số dư hiện tại</p>
-                    <p
-                      className={`text-xl font-extrabold mono-num mt-0.5 ${
-                        w.balance < 0 ? 'text-rose-400' : 'text-white'
-                      }`}
-                    >
-                      {formatVnd(w.balance, hideBalance)}
-                    </p>
+                    <div className="mt-0.5">
+                      <AnimatedCurrency
+                        value={w.balance}
+                        hideBalance={hideBalance}
+                        className={`text-xl font-bold ${
+                          w.balance < 0 ? 'text-rose-400' : 'text-white'
+                        }`}
+                      />
+                    </div>
                   </div>
 
                   <div className="flex items-center gap-3">

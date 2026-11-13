@@ -6,14 +6,23 @@ export default {
   ],
   theme: {
     extend: {
+      fontFamily: {
+        sans: ['"Plus Jakarta Sans"', 'system-ui', '-apple-system', 'sans-serif'],
+        mono: ['"JetBrains Mono"', 'monospace'],
+      },
       colors: {
         fintech: {
-          dark: '#0b0f19',
-          card: '#111827',
-          border: '#1f2937',
+          bg: '#090A0F',
+          card: '#12141C',
+          hover: '#151822',
+          border: 'rgba(255, 255, 255, 0.07)',
           primary: '#10b981',
-          accent: '#6366f1',
+          accent: '#38bdf8',
+          rose: '#fb7185',
         }
+      },
+      animation: {
+        'pulse-subtle': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
       }
     },
   },

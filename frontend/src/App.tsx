@@ -4,6 +4,7 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import { AppShell } from './components/AppShell';
 import { TransactionModal } from './components/TransactionModal';
 import { AuthPage } from './pages/AuthPage';
+import { LandingPage } from './pages/LandingPage';
 import { HomePage } from './pages/HomePage';
 import { TransactionsPage } from './pages/TransactionsPage';
 import { WalletsPage } from './pages/WalletsPage';
@@ -18,7 +19,7 @@ function ProtectedLayout() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-[#090c10] flex flex-col items-center justify-center gap-3 text-slate-300">
+      <div className="min-h-screen bg-[#090A0F] flex flex-col items-center justify-center gap-3 text-slate-300">
         <Loader2 className="w-8 h-8 animate-spin text-[#22c55e]" />
         <p className="text-xs font-medium text-slate-400">Đang tải dữ liệu tài chính...</p>
       </div>
@@ -44,7 +45,7 @@ function GuestRoute() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-[#090c10] flex items-center justify-center">
+      <div className="min-h-screen bg-[#090A0F] flex items-center justify-center">
         <Loader2 className="w-8 h-8 animate-spin text-[#22c55e]" />
       </div>
     );
@@ -62,7 +63,10 @@ export default function App() {
     <BrowserRouter>
       <AuthProvider>
         <Routes>
-          {/* Public Routes */}
+          {/* Public Landing & Marketing Page */}
+          <Route path="/landing" element={<LandingPage />} />
+
+          {/* Public Authentication & Public Bill Share */}
           <Route path="/login" element={<GuestRoute />} />
           <Route path="/share/:shareToken" element={<PublicSharePage />} />
 

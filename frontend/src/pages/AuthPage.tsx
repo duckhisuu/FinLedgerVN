@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import {
   Wallet,
   Eye,
@@ -9,6 +9,7 @@ import {
   PieChart,
   ShieldCheck,
   ReceiptText,
+  Sparkles,
 } from 'lucide-react';
 import { authApi } from '../api/client';
 import { useAuth } from '../context/AuthContext';
@@ -232,7 +233,7 @@ export function AuthPage() {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full py-3.5 rounded-2xl bg-[#22c55e] hover:bg-[#1eb053] disabled:opacity-60 text-slate-950 font-bold text-sm flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 transition-all mt-2"
+                className="w-full py-3.5 rounded-2xl bg-gradient-to-b from-emerald-400 to-emerald-600 hover:brightness-110 disabled:opacity-60 text-slate-950 font-bold text-sm flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 transition-all mt-2 cursor-pointer"
               >
                 {loading ? (
                   <Loader2 className="w-5 h-5 animate-spin" />
@@ -243,6 +244,16 @@ export function AuthPage() {
                   </>
                 )}
               </button>
+
+              <div className="pt-4 text-center border-t border-white/[0.06] mt-4">
+                <Link
+                  to="/landing"
+                  className="inline-flex items-center gap-1.5 text-xs text-slate-400 hover:text-cyan-300 transition-colors"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
+                  <span>Tìm hiểu thêm về nền tảng FinLedger VN →</span>
+                </Link>
+              </div>
             </form>
           </div>
         </div>

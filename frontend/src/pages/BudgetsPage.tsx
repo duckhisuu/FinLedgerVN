@@ -16,6 +16,8 @@ import {
 } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { CategoryIcon } from '../components/CategoryIcon';
+import { AnimatedCurrency } from '../components/ui/AnimatedCurrency';
+import { RichEmptyState } from '../components/ui/RichEmptyState';
 import {
   formatVnd,
   formatYearMonthLabel,
@@ -151,23 +153,29 @@ export function BudgetsPage() {
       ) : overview && overview.budgets.length > 0 ? (
         <>
           {/* Summary Card */}
-          <div className="bg-[#141923] border border-white/[0.06] rounded-2xl p-5 space-y-4">
+          <div className="bento-card p-5 sm:p-6 space-y-4">
             <div className="flex flex-wrap items-end justify-between gap-4">
               <div>
                 <p className="text-xs text-slate-400">Số tiền còn có thể chi</p>
-                <p
-                  className={`text-2xl sm:text-3xl font-extrabold mono-num mt-1 ${
-                    overview.totalRemaining < 0 ? 'text-rose-400' : 'text-[#22c55e]'
-                  }`}
-                >
-                  {formatVnd(overview.totalRemaining, hideBalance)}
-                </p>
+                <div className="mt-1">
+                  <AnimatedCurrency
+                    value={overview.totalRemaining}
+                    hideBalance={hideBalance}
+                    className={`text-2xl sm:text-3xl font-extrabold ${
+                      overview.totalRemaining < 0 ? 'text-rose-400' : 'text-emerald-400'
+                    }`}
+                  />
+                </div>
               </div>
               <div className="text-right">
                 <p className="text-xs text-slate-400">Tổng ngân sách</p>
-                <p className="text-sm font-bold mono-num text-white mt-0.5">
-                  {formatVnd(overview.totalBudgetLimit, hideBalance)}
-                </p>
+                <div className="mt-0.5">
+                  <AnimatedCurrency
+                    value={overview.totalBudgetLimit}
+                    hideBalance={hideBalance}
+                    className="text-sm font-bold text-white"
+                  />
+                </div>
               </div>
             </div>
 
@@ -186,11 +194,13 @@ export function BudgetsPage() {
                 />
               </div>
               <div className="flex justify-between text-xs text-slate-400">
-                <span>
-                  Đã chi:{' '}
-                  <strong className="text-slate-200 mono-num">
-                    {formatVnd(overview.totalSpentThisMonth, hideBalance)}
-                  </strong>
+                <span className="flex items-center gap-1">
+                  <span>Đã chi:</span>
+                  <AnimatedCurrency
+                    value={overview.totalSpentThisMonth}
+                    hideBalance={hideBalance}
+                    className="text-slate-200 font-bold"
+                  />
                 </span>
                 <span className="mono-num">{totalPct}%</span>
               </div>
@@ -211,9 +221,14 @@ export function BudgetsPage() {
                 <Sparkles className="w-5 h-5 text-[#22c55e] shrink-0" />
                 <div>
                   <p className="text-[11px] text-slate-400">Khuyến nghị chi mỗi ngày</p>
-                  <p className="text-sm font-bold mono-num text-white">
-                    {formatVnd(overview.recommendedDailySpend, hideBalance)} / ngày
-                  </p>
+                  <div className="mt-0.5 flex items-center">
+                    <AnimatedCurrency
+                      value={overview.recommendedDailySpend}
+                      hideBalance={hideBalance}
+                      className="text-sm font-bold text-white"
+                    />
+                    <span className="text-xs text-slate-400 ml-1">/ ngày</span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -230,7 +245,7 @@ export function BudgetsPage() {
               return (
                 <div
                   key={b.id}
-                  className="bg-[#141923] border border-white/[0.06] rounded-2xl p-4 sm:p-5 space-y-3"
+                  className="bento-card p-4 sm:p-5 space-y-3"
                 >
                   <div className="flex items-center justify-between gap-3">
                     <div className="flex items-center gap-3 min-w-0">
@@ -303,19 +318,14 @@ export function BudgetsPage() {
           </div>
         </>
       ) : (
-        <div className="bg-[#141923] border border-white/[0.06] rounded-2xl py-16 px-4 text-center space-y-3">
-          <p className="text-sm text-slate-300 font-medium">
-            Chưa có ngân sách nào cho {formatYearMonthLabel(month)}
-          </p>
-          <p className="text-xs text-slate-400 max-w-md mx-auto">
-            Đặt hạn mức cho từng danh mục (như Ăn uống, Mua sắm) hoặc Tổng ngân sách tháng để nhận gợi ý chi tiêu mỗi ngày.
-          </p>
-          <button
-            onClick={() => setShowModal(true)}
-            className="px-4 py-2.5 rounded-xl bg-[#22c55e] text-slate-950 font-semibold text-xs"
-          >
-            + Thiết lập ngân sách đầu tiên
-          </button>
+        <div className="bento-card py-10 px-4 text-center">
+          <RichEmptyState
+            variant="donut"
+            title={`Chưa có ngân sách nào cho ${formatYearMonthLabel(month)}`}
+            description="Đặt hạn mức cho từng danh mục hoặc tổng ngân sách để kiểm soát chi tiêu và nhận gợi ý hạn mức an toàn mỗi ngày"
+            actionLabel="+ Thiết lập ngân sách ngay"
+            onAction={() => setShowModal(true)}
+          />
         </div>
       )}
 
