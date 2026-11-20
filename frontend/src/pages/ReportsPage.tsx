@@ -7,8 +7,6 @@ import {
   TrendingUp,
   TrendingDown,
   PiggyBank,
-  Sparkles,
-  RotateCcw,
 } from 'lucide-react';
 import {
   FinancialReports,
@@ -29,44 +27,12 @@ import {
   shiftYearMonth,
 } from '../utils/format';
 
-// Demo realistic dataset for instant interactive visualization
-const DEMO_REPORTS: FinancialReports = {
-  selectedMonth: '2026-10',
-  netWorth: 185450000,
-  totalIncome: 38500000,
-  totalExpense: 21350000,
-  netSavings: 17150000,
-  savingsRatePercent: 45,
-  monthlyHistory: [
-    { month: '2026-05', label: 'T5/26', income: 32000000, expense: 19500000, net: 12500000 },
-    { month: '2026-06', label: 'T6/26', income: 34500000, expense: 22800000, net: 11700000 },
-    { month: '2026-07', label: 'T7/26', income: 33000000, expense: 18400000, net: 14600000 },
-    { month: '2026-08', label: 'T8/26', income: 36000000, expense: 20100000, net: 15900000 },
-    { month: '2026-09', label: 'T9/26', income: 35000000, expense: 19800000, net: 15200000 },
-    { month: '2026-10', label: 'T10/26', income: 38500000, expense: 21350000, net: 17150000 },
-  ],
-  expenseByCategory: [
-    { categoryId: 'demo-c1', categoryName: 'Ăn uống & Cà phê', icon: 'utensils', color: '#ef4444', amount: 8900000, percentage: 42 },
-    { categoryId: 'demo-c2', categoryName: 'Tiền thuê nhà & Điện nước', icon: 'home', color: '#f97316', amount: 5350000, percentage: 25 },
-    { categoryId: 'demo-c3', categoryName: 'Mua sắm & Đồ dùng', icon: 'shopping-bag', color: '#ec4899', amount: 3000000, percentage: 14 },
-    { categoryId: 'demo-c4', categoryName: 'Xăng xe & Di chuyển', icon: 'car', color: '#06b6d4', amount: 2100000, percentage: 10 },
-    { categoryId: 'demo-c5', categoryName: 'Giải trí & Phim ảnh', icon: 'gamepad-2', color: '#8b5cf6', amount: 2000000, percentage: 9 },
-  ],
-  incomeByCategory: [
-    { categoryId: 'demo-i1', categoryName: 'Lương cố định Tech', icon: 'briefcase', color: '#10b981', amount: 32000000, percentage: 83 },
-    { categoryId: 'demo-i2', categoryName: 'Freelance & Tư vấn', icon: 'sparkles', color: '#38bdf8', amount: 4500000, percentage: 12 },
-    { categoryId: 'demo-i3', categoryName: 'Cổ tức & Đầu tư', icon: 'trending-up', color: '#a855f7', amount: 2000000, percentage: 5 },
-  ],
-  wallets: [],
-};
-
 export function ReportsPage() {
   const { hideBalance, dataVersion, openTransactionModal } = useAuth();
 
   const [month, setMonth] = useState(getCurrentYearMonth());
   const [reports, setReports] = useState<FinancialReports | null>(null);
   const [loading, setLoading] = useState(true);
-  const [isDemoMode, setIsDemoMode] = useState(false);
   const [timeframe, setTimeframe] = useState<'6M' | '1Y'>('6M');
 
   // Chart hover state for 6-month cashflow
@@ -91,10 +57,7 @@ export function ReportsPage() {
     };
   }, [month, dataVersion]);
 
-  // Active data source: real or demo preview
-  const activeReports: FinancialReports | null = isDemoMode
-    ? { ...DEMO_REPORTS, selectedMonth: month }
-    : reports;
+  const activeReports: FinancialReports | null = reports;
 
   const isRealDataAllZero = useMemo(() => {
     if (!reports) return true;
@@ -169,12 +132,6 @@ export function ReportsPage() {
             <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-white">
               Báo cáo & Phân tích tài chính
             </h1>
-            {isDemoMode && (
-              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-cyan-500/15 text-cyan-400 border border-cyan-500/30 flex items-center gap-1 animate-pulse">
-                <Sparkles className="w-3 h-3" />
-                <span>Chế độ Demo trực quan</span>
-              </span>
-            )}
           </div>
           <p className="text-xs text-slate-400 mt-1">
             Đo lường sức khỏe dòng tiền, cơ cấu chi tiêu và tốc độ tích lũy tài sản
@@ -227,29 +184,6 @@ export function ReportsPage() {
               <ChevronRight className="w-4 h-4" />
             </button>
           </div>
-
-          {/* Interactive Demo Toggle Button */}
-          <button
-            onClick={() => setIsDemoMode((prev) => !prev)}
-            className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
-              isDemoMode
-                ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-[0_0_15px_rgba(56,189,248,0.2)]'
-                : 'bg-white/[0.05] hover:bg-white/[0.09] text-slate-300 border border-white/[0.08]'
-            }`}
-            title={isDemoMode ? 'Quay lại dữ liệu thật' : 'Nạp dữ liệu giả lập để xem demo các biểu đồ'}
-          >
-            {isDemoMode ? (
-              <>
-                <RotateCcw className="w-3.5 h-3.5 text-cyan-400" />
-                <span>Xem dữ liệu thật</span>
-              </>
-            ) : (
-              <>
-                <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
-                <span>✨ Dữ liệu Demo trực quan</span>
-              </>
-            )}
-          </button>
         </div>
       </div>
 
@@ -429,16 +363,14 @@ export function ReportsPage() {
               </div>
             </div>
 
-            {/* If all values are 0 in real mode */}
-            {!isDemoMode && isRealDataAllZero ? (
+            {/* If all values are 0 */}
+            {isRealDataAllZero ? (
               <RichEmptyState
                 variant="bars"
                 title="Chưa có dòng tiền phát sinh trong 6 tháng gần nhất"
-                description="Bắt đầu ghi nhận các khoản thu chi đầu tiên hoặc bấm nạp dữ liệu Demo để xem trực quan biểu đồ đối sánh"
+                description="Ghi nhận các khoản thu chi đầu tiên hoặc đồng bộ ngân hàng để xem biểu đồ phân tích dòng tiền"
                 actionLabel="+ Ghi giao dịch ngay"
                 onAction={() => openTransactionModal({ mode: 'EXPENSE' })}
-                secondaryActionLabel="✨ Bật xem Demo trực quan"
-                onSecondaryAction={() => setIsDemoMode(true)}
                 className="py-12"
               />
             ) : (
@@ -629,8 +561,6 @@ export function ReportsPage() {
                 description="Ghi nhận các chi tiêu ăn uống, mua sắm hoặc hóa đơn để theo dõi cơ cấu ngân sách trực quan"
                 actionLabel="+ Ghi khoản chi đầu tiên"
                 onAction={() => openTransactionModal({ mode: 'EXPENSE' })}
-                secondaryActionLabel={isDemoMode ? undefined : '✨ Xem dữ liệu demo'}
-                onSecondaryAction={() => setIsDemoMode(true)}
                 className="py-8"
               />
             ) : (
@@ -721,8 +651,6 @@ export function ReportsPage() {
                 description="Ghi nhận thu nhập tiền lương, thưởng định kỳ hoặc lợi nhuận đầu tư"
                 actionLabel="+ Ghi khoản thu đầu tiên"
                 onAction={() => openTransactionModal({ mode: 'INCOME' })}
-                secondaryActionLabel={isDemoMode ? undefined : '✨ Xem dữ liệu demo'}
-                onSecondaryAction={() => setIsDemoMode(true)}
                 className="py-8"
               />
             ) : (

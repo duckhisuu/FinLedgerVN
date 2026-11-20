@@ -13,6 +13,7 @@ import { ReportsPage } from './pages/ReportsPage';
 import { GroupSplitPage } from './pages/GroupSplitPage';
 import { AccountPage } from './pages/AccountPage';
 import { PublicSharePage } from './pages/PublicSharePage';
+import { BankConnectionsPage } from './pages/BankConnectionsPage';
 
 function ProtectedLayout() {
   const { user, isLoading } = useAuth();
@@ -75,6 +76,7 @@ export default function App() {
             <Route path="/" element={<HomePage />} />
             <Route path="/transactions" element={<TransactionsPage />} />
             <Route path="/wallets" element={<WalletsPage />} />
+            <Route path="/connections" element={<BankConnectionsPage />} />
             <Route path="/budgets" element={<BudgetsPage />} />
             <Route path="/reports" element={<ReportsPage />} />
             <Route path="/groups" element={<GroupSplitPage />} />

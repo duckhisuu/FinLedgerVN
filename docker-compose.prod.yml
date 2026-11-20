@@ -1,0 +1,87 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: finledger-prod-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-finledger}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgrespassword}
+    volumes:
+      - postgres_prod_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-finledger}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: finledger-prod-redis
+    restart: unless-stopped
+    volumes:
+      - redis_prod_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  ocr-worker:
+    build:
+      context: ./ocr-worker
+      dockerfile: Dockerfile
+    container_name: finledger-prod-ocr-worker
+    restart: unless-stopped
+    environment:
+      - PORT=8081
+      - PADDLE_PDX_ENABLE_MKLDNN_BYDEFAULT=0
+      - FLAGS_use_onednn=0
+      - FLAGS_enable_pir_api=0
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: finledger-prod-backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      PORT: 8080
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-finledger}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-postgres}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-postgrespassword}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      OCR_WORKER_URL: http://ocr-worker:8081
+      JWT_SECRET: ${JWT_SECRET:-finledger_vn_personal_finance_jwt_secret_key_2026_production_grade_hmac256}
+      WEBHOOK_API_KEY: ${WEBHOOK_API_KEY:-finledger_secret_webhook_key_2026}
+      WEBHOOK_SIGNATURE_SECRET: ${WEBHOOK_SIGNATURE_SECRET:-finledger_hmac_secret_2026}
+      FINLEDGER_AI_ENABLED: ${FINLEDGER_AI_ENABLED:-false}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+    ports:
+      - "8080:8080"
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: ""
+    container_name: finledger-prod-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    environment:
+      PORT: 80
+      BACKEND_URL: http://backend:8080
+    ports:
+      - "80:80"
+
+volumes:
+  postgres_prod_data:
+  redis_prod_data:

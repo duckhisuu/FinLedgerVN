@@ -1107,6 +1107,12 @@ public class PersonalFinanceService {
 
         Optional<BankAccountMapping> byLedger = bankAccountMappingRepository.findByLedgerAccountId(walletId);
         Optional<BankAccountMapping> byNumber = bankAccountMappingRepository.findByBankAccountNumber(cleanAccNum);
+        String resolvedProvider = BankAccountMapping.inferProviderCode(bankCode);
+        String existingUserBridgeToken = bankAccountMappingRepository.findByUserId(userId).stream()
+                .map(BankAccountMapping::getWebhookSecretToken)
+                .filter(t -> t != null && !t.isBlank())
+                .findFirst()
+                .orElseGet(() -> "flb_" + UUID.randomUUID().toString().replace("-", ""));
 
         if (byNumber.isPresent() && !byNumber.get().getLedgerAccountId().equals(walletId)) {
             // Account number already mapped elsewhere — skip silently unless owned by same user
@@ -1116,6 +1122,11 @@ public class PersonalFinanceService {
             BankAccountMapping m = byNumber.get();
             m.setLedgerAccountId(walletId);
             m.setBankName(bankCode != null && !bankCode.isBlank() ? bankCode : "Bank");
+            m.setProviderCode(resolvedProvider);
+            m.setAccountIdentifier(cleanAccNum);
+            if (m.getWebhookSecretToken() == null || m.getWebhookSecretToken().isBlank()) {
+                m.setWebhookSecretToken(existingUserBridgeToken);
+            }
             bankAccountMappingRepository.save(m);
             return;
         }
@@ -1125,9 +1136,15 @@ public class PersonalFinanceService {
                 .ledgerAccountId(walletId)
                 .defaultSuspenseExpenseAccountId(defaultExpenseId)
                 .defaultSuspenseRevenueAccountId(defaultRevenueId)
+                .webhookSecretToken(existingUserBridgeToken)
                 .build());
         mapping.setBankAccountNumber(cleanAccNum);
         mapping.setBankName(bankCode != null && !bankCode.isBlank() ? bankCode : "Bank");
+        mapping.setProviderCode(resolvedProvider);
+        mapping.setAccountIdentifier(cleanAccNum);
+        if (mapping.getWebhookSecretToken() == null || mapping.getWebhookSecretToken().isBlank()) {
+            mapping.setWebhookSecretToken(existingUserBridgeToken);
+        }
         bankAccountMappingRepository.save(mapping);
     }
 

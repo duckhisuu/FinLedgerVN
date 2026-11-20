@@ -44,8 +44,12 @@ finledger:
     api-key: ${WEBHOOK_API_KEY:finledger_secret_webhook_key_2026}
     signature-secret: ${WEBHOOK_SIGNATURE_SECRET:finledger_hmac_secret_2026}
 
+ocr:
+  worker:
+    url: ${OCR_WORKER_URL:http://localhost:8081}
+
 server:
-  port: 8080
+  port: ${PORT:${SERVER_PORT:8080}}
 
 logging:
   level:

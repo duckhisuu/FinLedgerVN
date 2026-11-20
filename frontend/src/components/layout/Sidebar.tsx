@@ -13,6 +13,7 @@ import {
   LogOut,
   Sparkles,
   ExternalLink,
+  Link2,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
@@ -27,6 +28,7 @@ export const DESKTOP_NAV_LINKS: NavItem[] = [
   { to: '/', label: 'Tổng quan', icon: Home, exact: true },
   { to: '/transactions', label: 'Sổ giao dịch', icon: ReceiptText },
   { to: '/wallets', label: 'Ví của tôi', icon: Wallet },
+  { to: '/connections', label: 'Kết nối VCB & MoMo', icon: Link2 },
   { to: '/budgets', label: 'Ngân sách', icon: PieChart },
   { to: '/reports', label: 'Báo cáo phân tích', icon: BarChart3 },
   { to: '/groups', label: 'Chia tiền nhóm', icon: Users },

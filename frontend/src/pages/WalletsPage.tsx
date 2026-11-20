@@ -7,6 +7,7 @@ import {
   Archive,
   X,
   CheckCircle2,
+  Link2,
 } from 'lucide-react';
 import { Wallet, WalletsSummary, financeApi } from '../api/client';
 import { useAuth } from '../context/AuthContext';
@@ -174,13 +175,22 @@ export function WalletsPage() {
           </p>
         </div>
 
-        <button
-          onClick={openCreateModal}
-          className="px-4 py-2.5 rounded-xl bg-[#22c55e] hover:bg-[#1eb053] text-slate-950 font-semibold text-xs sm:text-sm flex items-center gap-1.5 shadow-lg shadow-emerald-500/20"
-        >
-          <Plus className="w-4 h-4 stroke-[2.5]" />
-          <span>Thêm ví mới</span>
-        </button>
+        <div className="flex flex-wrap items-center gap-2.5">
+          <Link
+            to="/connections"
+            className="px-3.5 py-2.5 rounded-xl bg-white/[0.05] hover:bg-white/[0.1] border border-white/[0.1] text-slate-200 font-semibold text-xs sm:text-sm flex items-center gap-1.5 transition-colors"
+          >
+            <Link2 className="w-4 h-4 text-emerald-400" />
+            <span>Đồng bộ VCB &amp; MoMo</span>
+          </Link>
+          <button
+            onClick={openCreateModal}
+            className="px-4 py-2.5 rounded-xl bg-[#22c55e] hover:bg-[#1eb053] text-slate-950 font-semibold text-xs sm:text-sm flex items-center gap-1.5 shadow-lg shadow-emerald-500/20"
+          >
+            <Plus className="w-4 h-4 stroke-[2.5]" />
+            <span>Thêm ví mới</span>
+          </button>
+        </div>
       </div>
 
       {/* Overview Totals */}

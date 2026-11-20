@@ -16,4 +16,13 @@ public interface BankAccountMappingRepository extends JpaRepository<BankAccountM
     Optional<BankAccountMapping> findByLedgerAccountId(UUID ledgerAccountId);
 
     List<BankAccountMapping> findByUserId(UUID userId);
+
+    List<BankAccountMapping> findByWebhookSecretToken(String webhookSecretToken);
+
+    Optional<BankAccountMapping> findByProviderCodeAndAccountIdentifier(String providerCode, String accountIdentifier);
+
+    Optional<BankAccountMapping> findByUserIdAndProviderCodeAndAccountIdentifier(
+            UUID userId, String providerCode, String accountIdentifier);
+
+    Optional<BankAccountMapping> findFirstByUserIdAndProviderCodeOrderByCreatedAtAsc(UUID userId, String providerCode);
 }

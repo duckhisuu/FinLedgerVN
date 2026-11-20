@@ -14,6 +14,35 @@ export function setStoredToken(token: string | null) {
   }
 }
 
+export function getApiOrigin(): string {
+  const raw = import.meta.env?.VITE_API_BASE_URL?.trim();
+  if (!raw) return '';
+  const cleaned = raw.replace(/\/api\/v1\/?$/, '').replace(/\/+$/, '');
+  if (
+    typeof window !== 'undefined' &&
+    window.location.hostname !== 'localhost' &&
+    window.location.hostname !== '127.0.0.1' &&
+    (cleaned.includes('localhost') || cleaned.includes('127.0.0.1'))
+  ) {
+    return '';
+  }
+  if (
+    typeof window !== 'undefined' &&
+    (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') &&
+    cleaned === 'http://localhost:8080'
+  ) {
+    return '';
+  }
+  return cleaned;
+}
+
+export function resolveApiUrl(path: string): string {
+  if (/^https?:\/\//i.test(path)) return path;
+  const origin = getApiOrigin();
+  if (!origin) return path;
+  return `${origin}${path.startsWith('/') ? path : `/${path}`}`;
+}
+
 export interface UserProfile {
   id: string;
   email: string;
@@ -300,7 +329,7 @@ async function fetchJson<T>(url: string, options?: RequestInit, skipAuth = false
     headers['Authorization'] = `Bearer ${token}`;
   }
 
-  const res = await fetch(url, {
+  const res = await fetch(resolveApiUrl(url), {
     ...options,
     headers,
   });
@@ -649,7 +678,7 @@ export const financeApi = {
     const token = getStoredToken();
     const formData = new FormData();
     formData.append('image', file);
-    const res = await fetch('/api/v1/finance/receipts/scan', {
+    const res = await fetch(resolveApiUrl('/api/v1/finance/receipts/scan'), {
       method: 'POST',
       headers: token ? { Authorization: `Bearer ${token}` } : undefined,
       body: formData,
@@ -831,5 +860,137 @@ export const publicShareApi = {
     const data = await fetchJson<any>(`/api/v1/public/groups/${shareToken}`, undefined, true);
     return normalizePublicGroup(data);
   },
-  getStreamUrl: (shareToken: string) => `/api/v1/public/groups/${shareToken}/stream`,
+  getStreamUrl: (shareToken: string) => resolveApiUrl(`/api/v1/public/groups/${shareToken}/stream`),
+};
+
+// =========================================================================
+// VCB & MOMO MULTI-SOURCE INGESTION & RECONCILIATION API
+// =========================================================================
+
+export interface ConnectedSourceTelemetry {
+  id: string;
+  providerCode: 'VCB' | 'MOMO' | 'SEPAY' | string;
+  bankName: string;
+  accountIdentifier: string;
+  walletId: string;
+  walletName: string;
+  ledgerBalance: number;
+  lastReportedBalance: number | null;
+  reconciliationDelta: number | null;
+  reconciled: boolean;
+  lastSyncedAt: string | null;
+  webhookSecretToken: string;
+}
+
+export interface MultiSourceIngestionResult {
+  status: 'PROCESSED' | 'MERGED_DUPLICATE' | 'INTERNAL_TRANSFER_CREATED' | 'INTERNAL_TRANSFER_LINKED' | string;
+  providerCode: string;
+  channel: string;
+  accountIdentifier: string;
+  transferDirection: 'IN' | 'OUT';
+  amount: number;
+  runningBalanceAfterTx: number | null;
+  ledgerBalanceAfterTx: number;
+  extractedReferenceCode: string | null;
+  counterpartyHint: string | null;
+  cleanDescription: string;
+  sourceAccountId: string;
+  journalEntryId: string;
+  targetCategoryAccountId: string | null;
+  targetCategoryName: string | null;
+  categorizationSource: string | null;
+  sourcesMerged: string | null;
+  syncedAt: string;
+  pipelineTrace: string;
+}
+
+export interface SyncedEventLog {
+  id: string;
+  providerCode: 'VCB' | 'MOMO' | string;
+  walletName: string;
+  transferDirection: 'IN' | 'OUT';
+  entryType: 'EXPENSE' | 'INCOME' | 'TRANSFER' | string;
+  amount: number;
+  description: string;
+  extractedReferenceCode: string | null;
+  sourcesMerged: string;
+  journalEntryId: string;
+  createdAt: string;
+}
+
+export const ingestionApi = {
+  getSources: async (): Promise<ConnectedSourceTelemetry[]> => {
+    const list = await fetchJson<any[]>('/api/v1/ingestion/sources');
+    return (list || []).map((s) => ({
+      id: s.id,
+      providerCode: s.providerCode || 'SEPAY',
+      bankName: s.bankName || s.providerCode || 'Bank',
+      accountIdentifier: s.accountIdentifier || '',
+      walletId: s.walletId,
+      walletName: s.walletName || 'Ví liên kết',
+      ledgerBalance: num(s.ledgerBalance),
+      lastReportedBalance: s.lastReportedBalance !== null && s.lastReportedBalance !== undefined
+        ? num(s.lastReportedBalance)
+        : null,
+      reconciliationDelta: s.reconciliationDelta !== null && s.reconciliationDelta !== undefined
+        ? num(s.reconciliationDelta)
+        : null,
+      reconciled: !!s.reconciled,
+      lastSyncedAt: s.lastSyncedAt || null,
+      webhookSecretToken: s.webhookSecretToken || '',
+    }));
+  },
+
+  getSyncedEvents: async (): Promise<SyncedEventLog[]> => {
+    const list = await fetchJson<any[]>('/api/v1/ingestion/events');
+    return (list || []).map((e) => ({
+      id: e.id,
+      providerCode: e.providerCode || 'BANK',
+      walletName: e.walletName || 'Ví',
+      transferDirection: e.transferDirection === 'IN' ? 'IN' : 'OUT',
+      entryType: e.entryType || 'EXPENSE',
+      amount: num(e.amount),
+      description: e.description || '',
+      extractedReferenceCode: e.extractedReferenceCode || null,
+      sourcesMerged: e.sourcesMerged || 'MOBILE_PUSH',
+      journalEntryId: e.journalEntryId,
+      createdAt: e.createdAt || new Date().toISOString(),
+    }));
+  },
+
+  connectSource: async (data: {
+    providerCode: 'VCB' | 'MOMO';
+    accountIdentifier: string;
+    walletId?: string;
+    walletName?: string;
+    initialBalance?: number;
+  }): Promise<ConnectedSourceTelemetry> => {
+    const s = await fetchJson<any>('/api/v1/ingestion/sources', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+    return {
+      id: s.id,
+      providerCode: s.providerCode,
+      bankName: s.bankName,
+      accountIdentifier: s.accountIdentifier,
+      walletId: s.walletId,
+      walletName: s.walletName,
+      ledgerBalance: num(s.ledgerBalance),
+      lastReportedBalance: s.lastReportedBalance !== null && s.lastReportedBalance !== undefined
+        ? num(s.lastReportedBalance)
+        : null,
+      reconciliationDelta: s.reconciliationDelta !== null && s.reconciliationDelta !== undefined
+        ? num(s.reconciliationDelta)
+        : null,
+      reconciled: !!s.reconciled,
+      lastSyncedAt: s.lastSyncedAt || null,
+      webhookSecretToken: s.webhookSecretToken || '',
+    };
+  },
+
+  rotateBridgeToken: () =>
+    fetchJson<ConnectedSourceTelemetry[]>('/api/v1/ingestion/sources/rotate-token', {
+      method: 'POST',
+    }),
 };
