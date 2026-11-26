@@ -19,21 +19,24 @@ def get_ocr_engine():
     if ocr_engine is not None:
         return ocr_engine
 
-    configs = [
-        {
+    configs = []
+    ppocrv5 = getattr(OCRVersion, "PPOCRV5", None)
+    ppocrv4 = getattr(OCRVersion, "PPOCRV4", None)
+    if ppocrv5 is not None:
+        configs.append({
             "Rec.lang_type": LangRec.LATIN,
-            "Rec.ocr_version": OCRVersion.PPOCRV5,
+            "Rec.ocr_version": ppocrv5,
             "Rec.model_type": ModelType.MOBILE,
-        },
-        {
+        })
+    if ppocrv4 is not None:
+        configs.append({
             "Rec.lang_type": LangRec.LATIN,
-            "Rec.ocr_version": OCRVersion.PPOCRV3,
+            "Rec.ocr_version": ppocrv4,
             "Rec.model_type": ModelType.MOBILE,
-        },
-        {
-            "Rec.lang_type": LangRec.LATIN,
-        },
-    ]
+        })
+    configs.append({
+        "Rec.lang_type": LangRec.LATIN,
+    })
 
     for idx, params in enumerate(configs):
         try:
