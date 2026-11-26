@@ -44,6 +44,7 @@ export function TransactionModal() {
 
   // OCR Scan states
   const [ocrScanning, setOcrScanning] = useState(false);
+  const [ocrPreviewUrl, setOcrPreviewUrl] = useState<string | null>(null);
   const [ocrMerchant, setOcrMerchant] = useState('');
   const [ocrItems, setOcrItems] = useState<
     Array<{ productName: string; lineAmount: number; categoryId: string }>
@@ -91,6 +92,10 @@ export function TransactionModal() {
           setTxDate(new Date().toISOString().slice(0, 10));
           setOcrItems([]);
           setOcrMerchant('');
+          setOcrPreviewUrl((prev) => {
+            if (prev) URL.revokeObjectURL(prev);
+            return null;
+          });
 
           const defaultW =
             txModalPreset.defaultWalletId || walletRes.wallets[0]?.id || '';
@@ -162,6 +167,11 @@ export function TransactionModal() {
     const file = e.target.files?.[0];
     if (!file) return;
     setError(null);
+    const nextUrl = URL.createObjectURL(file);
+    setOcrPreviewUrl((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return nextUrl;
+    });
     setOcrScanning(true);
     try {
       const preview = await financeApi.scanReceipt(file);
@@ -271,7 +281,7 @@ export function TransactionModal() {
           <div className="grid grid-cols-4 gap-1 p-1 rounded-2xl bg-[#0c1017] border border-white/[0.05]">
             <button
               type="button"
-              onClick={() => setMode('EXPENSE')}
+              onClick={() => { setMode('EXPENSE'); setError(null); }}
               className={`py-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all ${mode === 'EXPENSE'
                   ? 'bg-rose-500 text-white shadow-sm'
                   : 'text-slate-400 hover:text-slate-200'
@@ -282,7 +292,7 @@ export function TransactionModal() {
             </button>
             <button
               type="button"
-              onClick={() => setMode('INCOME')}
+              onClick={() => { setMode('INCOME'); setError(null); }}
               className={`py-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all ${mode === 'INCOME'
                   ? 'bg-[#22c55e] text-slate-950 shadow-sm'
                   : 'text-slate-400 hover:text-slate-200'
@@ -294,7 +304,7 @@ export function TransactionModal() {
             <button
               type="button"
               disabled={wallets.length < 2}
-              onClick={() => setMode('TRANSFER')}
+              onClick={() => { setMode('TRANSFER'); setError(null); }}
               title={wallets.length < 2 ? 'Cần ít nhất 2 ví để chuyển tiền' : ''}
               className={`py-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all disabled:opacity-40 ${mode === 'TRANSFER'
                   ? 'bg-sky-500 text-slate-950 shadow-sm'
@@ -307,7 +317,7 @@ export function TransactionModal() {
             {!editTx && (
               <button
                 type="button"
-                onClick={() => setMode('OCR')}
+                onClick={() => { setMode('OCR'); setError(null); }}
                 className={`py-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all ${mode === 'OCR'
                     ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
                     : 'text-slate-400 hover:text-slate-200'
@@ -335,50 +345,91 @@ export function TransactionModal() {
           ) : mode === 'OCR' ? (
             /* OCR RECEIPT SCANNER TAB */
             <div className="space-y-4">
-              <label className="flex flex-col items-center justify-center border-2 border-dashed border-white/15 hover:border-emerald-500/50 rounded-2xl p-6 cursor-pointer bg-[#0c1017]/60 transition-colors">
-                {ocrScanning ? (
-                  <div className="flex flex-col items-center gap-2 text-emerald-400">
-                    <Loader2 className="w-7 h-7 animate-spin" />
-                    <span className="text-sm font-medium">Đang đọc hóa đơn...</span>
+              {ocrPreviewUrl && !ocrScanning ? (
+                <div className="flex items-center gap-3.5 p-3 rounded-2xl bg-[#0c1017]/80 border border-white/10">
+                  <img
+                    src={ocrPreviewUrl}
+                    alt="Hóa đơn đã tải lên"
+                    className="h-24 w-20 object-cover rounded-xl border border-white/10 shrink-0"
+                  />
+                  <div className="flex-1 min-w-0 space-y-2">
+                    <p className="text-xs text-slate-300 font-medium">
+                      {ocrItems.length > 0
+                        ? `Đã nhận diện ${ocrItems.length} mặt hàng từ hóa đơn`
+                        : 'Chưa tách được mặt hàng — bạn có thể chọn ảnh rõ hơn'}
+                    </p>
+                    <label className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] border border-white/10 text-xs font-semibold text-emerald-400 cursor-pointer transition-colors">
+                      <Camera className="w-3.5 h-3.5" />
+                      <span>Chọn ảnh khác</span>
+                      <input
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp,image/*"
+                        onChange={handleReceiptFileChange}
+                        className="hidden"
+                        disabled={ocrScanning}
+                      />
+                    </label>
                   </div>
-                ) : (
-                  <div className="flex flex-col items-center gap-1.5 text-center">
-                    <div className="w-11 h-11 rounded-full bg-emerald-500/15 text-emerald-400 flex items-center justify-center mb-1">
-                      <Camera className="w-5 h-5" />
+                </div>
+              ) : (
+                <label className="flex flex-col items-center justify-center border-2 border-dashed border-white/15 hover:border-emerald-500/50 rounded-2xl p-6 cursor-pointer bg-[#0c1017]/60 transition-colors">
+                  {ocrScanning ? (
+                    <div className="flex flex-col items-center gap-2 text-emerald-400">
+                      <Loader2 className="w-7 h-7 animate-spin" />
+                      <span className="text-sm font-medium">Đang đọc hóa đơn...</span>
                     </div>
-                    <span className="text-sm font-semibold text-slate-200">
-                      Chụp hoặc tải ảnh hóa đơn siêu thị / cửa hàng
-                    </span>
-                    <span className="text-xs text-slate-400">
-                      Hỗ trợ JPG, PNG, WEBP (tối đa 5MB)
-                    </span>
-                  </div>
-                )}
-                <input
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp"
-                  onChange={handleReceiptFileChange}
-                  className="hidden"
-                  disabled={ocrScanning}
-                />
-              </label>
-
-              {/* Wallet Selector for OCR */}
-              <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1.5">
-                  Thanh toán từ ví
+                  ) : (
+                    <div className="flex flex-col items-center gap-1.5 text-center">
+                      <div className="w-11 h-11 rounded-full bg-emerald-500/15 text-emerald-400 flex items-center justify-center mb-1">
+                        <Camera className="w-5 h-5" />
+                      </div>
+                      <span className="text-sm font-semibold text-slate-200">
+                        Chụp hoặc tải ảnh hóa đơn siêu thị / cửa hàng
+                      </span>
+                      <span className="text-xs text-slate-400">
+                        Hỗ trợ JPG, PNG, WEBP (tối đa 5MB)
+                      </span>
+                    </div>
+                  )}
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp,image/*"
+                    onChange={handleReceiptFileChange}
+                    className="hidden"
+                    disabled={ocrScanning}
+                  />
                 </label>
-                <select
-                  value={walletId}
-                  onChange={(e) => setWalletId(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#0c1017] border border-white/10 text-sm text-white focus:outline-none focus:border-emerald-500"
-                >
-                  {wallets.map((w) => (
-                    <option key={w.id} value={w.id}>
-                      {w.name} ({formatVnd(w.balance)})
-                    </option>
-                  ))}
-                </select>
+              )}
+
+              {/* Wallet & Date Selector for OCR */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-slate-400 mb-1.5">
+                    Thanh toán từ ví
+                  </label>
+                  <select
+                    value={walletId}
+                    onChange={(e) => setWalletId(e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-[#0c1017] border border-white/10 text-sm text-white focus:outline-none focus:border-emerald-500"
+                  >
+                    {wallets.map((w) => (
+                      <option key={w.id} value={w.id}>
+                        {w.name} ({formatVnd(w.balance)})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-400 mb-1.5">
+                    Ngày giao dịch
+                  </label>
+                  <input
+                    type="date"
+                    value={txDate}
+                    onChange={(e) => setTxDate(e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-[#0c1017] border border-white/10 text-sm text-white focus:outline-none focus:border-emerald-500"
+                  />
+                </div>
               </div>
 
               {ocrItems.length > 0 && (
@@ -397,7 +448,26 @@ export function TransactionModal() {
 
                   <div className="space-y-2">
                     <div className="flex items-center justify-between text-xs text-slate-400">
-                      <span>Chi tiết mặt hàng ({ocrItems.length})</span>
+                      <div className="flex items-center gap-2">
+                        <span>Chi tiết mặt hàng ({ocrItems.length})</span>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setOcrItems((prev) => [
+                              ...prev,
+                              {
+                                productName: 'Mặt hàng mới',
+                                lineAmount: 0,
+                                categoryId: expenseCategories[0]?.id || '',
+                              },
+                            ])
+                          }
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/25 font-semibold cursor-pointer"
+                        >
+                          <Plus className="w-3 h-3" />
+                          <span>Thêm món</span>
+                        </button>
+                      </div>
                       <span className="mono-num font-semibold text-emerald-400">
                         Tổng: {formatVnd(ocrTotal)}
                       </span>

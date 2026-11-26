@@ -4,16 +4,13 @@ WORKDIR /app
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    OMP_NUM_THREADS=2 \
-    MKL_NUM_THREADS=2
+    OMP_THREAD_LIMIT=2
 
-# Install minimal OS libraries required by OpenCV and PaddlePaddle CPU
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libgomp1 \
+    tesseract-ocr \
+    tesseract-ocr-vie \
+    tesseract-ocr-eng \
     libglib2.0-0 \
-    libsm6 \
-    libxext6 \
-    libxrender-dev \
     libgl1 \
     && rm -rf /var/lib/apt/lists/*
 
@@ -24,4 +21,4 @@ COPY app.py .
 
 EXPOSE 8081
 
-CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8081", "--workers", "1"]
+CMD ["sh", "-c", "uvicorn app:app --host 0.0.0.0 --port ${PORT:-8081} --workers 1"]

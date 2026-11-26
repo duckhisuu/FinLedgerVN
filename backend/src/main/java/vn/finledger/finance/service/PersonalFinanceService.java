@@ -35,6 +35,8 @@ import java.time.format.DateTimeFormatter;
 import java.time.temporal.TemporalAdjusters;
 import java.util.*;
 import java.util.function.Function;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -896,7 +898,7 @@ public class PersonalFinanceService {
             throw new IllegalArgumentException("Kích thước ảnh không được vượt quá 5MB.");
         }
         String ct = image.getContentType();
-        if (ct == null || !Set.of("image/jpeg", "image/png", "image/webp").contains(ct.toLowerCase())) {
+        if (ct == null || !Set.of("image/jpeg", "image/jpg", "image/png", "image/webp").contains(ct.toLowerCase())) {
             throw new IllegalArgumentException("Chỉ hỗ trợ định dạng ảnh JPG, PNG hoặc WEBP.");
         }
 
@@ -907,7 +909,11 @@ public class PersonalFinanceService {
 
         List<ReconstructedReceiptRow> rows = spatialReceiptLayoutParser.parse(boxes);
         ParsedReceiptResult parsed = receiptLineItemExtractor.extract(rows);
-        if (parsed.getLineItems() == null || parsed.getLineItems().isEmpty()) {
+        List<ReceiptLineItemDto> extractedItems = parsed.getLineItems();
+        if (extractedItems == null || extractedItems.isEmpty()) {
+            extractedItems = extractFallbackReceiptItems(parsed, rows);
+        }
+        if (extractedItems.isEmpty()) {
             throw new IllegalArgumentException("Không tách được dòng sản phẩm từ hóa đơn. Bạn có thể nhập giao dịch thủ công.");
         }
 
@@ -920,7 +926,7 @@ public class PersonalFinanceService {
         List<ReceiptPreviewResponse.ReceiptPreviewItem> previewItems = new ArrayList<>();
         BigDecimal computedSum = BigDecimal.ZERO.setScale(4, RoundingMode.HALF_EVEN);
 
-        for (ReceiptLineItemDto item : parsed.getLineItems()) {
+        for (ReceiptLineItemDto item : extractedItems) {
             BigDecimal lineAmt = item.getLineAmount() != null
                     ? item.getLineAmount().setScale(4, RoundingMode.HALF_EVEN)
                     : BigDecimal.ZERO.setScale(4, RoundingMode.HALF_EVEN);
@@ -1037,6 +1043,91 @@ public class PersonalFinanceService {
     // =========================================================================
     // INTERNAL HELPERS
     // =========================================================================
+
+    private List<ReceiptLineItemDto> extractFallbackReceiptItems(
+            ParsedReceiptResult parsed,
+            List<ReconstructedReceiptRow> rows) {
+        String merchant = parsed.getMerchantName() != null && !parsed.getMerchantName().isBlank()
+                ? parsed.getMerchantName()
+                : "Hóa đơn mua sắm";
+
+        if (parsed.getDetectedTotalAmount() != null
+                && parsed.getDetectedTotalAmount().compareTo(BigDecimal.ZERO) > 0) {
+            BigDecimal total = parsed.getDetectedTotalAmount().setScale(4, RoundingMode.HALF_EVEN);
+            return List.of(ReceiptLineItemDto.builder()
+                    .productName(merchant)
+                    .quantity(BigDecimal.ONE)
+                    .unitPrice(total)
+                    .lineAmount(total)
+                    .build());
+        }
+
+        if (rows == null || rows.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        Pattern groupedVnd = Pattern.compile("(?<!\\d)(\\d{1,3}(?:[.,]\\d{3})+)(?!\\d)");
+        Pattern plainVnd = Pattern.compile("(?<!\\d)([1-9]\\d{3,8})(?!\\d)");
+        BigDecimal bestAmount = BigDecimal.ZERO;
+
+        for (ReconstructedReceiptRow row : rows) {
+            String text = row.getJoinedText();
+            if (text == null || text.isBlank()) continue;
+
+            Matcher gm = groupedVnd.matcher(text);
+            while (gm.find()) {
+                BigDecimal candidate = parsePlausibleVnd(gm.group(1));
+                if (candidate != null && candidate.compareTo(bestAmount) > 0) {
+                    bestAmount = candidate;
+                }
+            }
+        }
+
+        if (bestAmount.compareTo(BigDecimal.ZERO) <= 0) {
+            for (ReconstructedReceiptRow row : rows) {
+                String text = row.getJoinedText();
+                if (text == null || text.isBlank()) continue;
+                String lower = text.toLowerCase(Locale.ROOT);
+                if (lower.contains("sdt") || lower.contains("dt:") || lower.contains("tel") || lower.contains("mst")) {
+                    continue;
+                }
+                Matcher pm = plainVnd.matcher(text);
+                while (pm.find()) {
+                    BigDecimal candidate = parsePlausibleVnd(pm.group(1));
+                    if (candidate != null && candidate.compareTo(bestAmount) > 0) {
+                        bestAmount = candidate;
+                    }
+                }
+            }
+        }
+
+        if (bestAmount.compareTo(BigDecimal.ZERO) <= 0) {
+            return Collections.emptyList();
+        }
+
+        BigDecimal scaled = bestAmount.setScale(4, RoundingMode.HALF_EVEN);
+        return List.of(ReceiptLineItemDto.builder()
+                .productName(merchant)
+                .quantity(BigDecimal.ONE)
+                .unitPrice(scaled)
+                .lineAmount(scaled)
+                .build());
+    }
+
+    private BigDecimal parsePlausibleVnd(String rawDigits) {
+        if (rawDigits == null) return null;
+        String digits = rawDigits.replaceAll("[.,]", "");
+        if (digits.isEmpty() || digits.startsWith("0")) return null;
+        try {
+            BigDecimal val = new BigDecimal(digits);
+            if (val.compareTo(new BigDecimal("1000")) >= 0
+                    && val.compareTo(new BigDecimal("500000000")) <= 0) {
+                return val;
+            }
+        } catch (NumberFormatException ignored) {
+        }
+        return null;
+    }
 
     private boolean isWalletAccount(Account acc) {
         if (acc.isArchived()) return false;

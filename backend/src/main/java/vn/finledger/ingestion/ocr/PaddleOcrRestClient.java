@@ -27,13 +27,14 @@ public class PaddleOcrRestClient implements OcrVisionClient {
 
     public PaddleOcrRestClient(
             @Value("${ocr.worker.url:http://localhost:8081}") String ocrWorkerUrl) {
-        this.ocrWorkerUrl = ocrWorkerUrl;
+        String normalizedUrl = ocrWorkerUrl != null ? ocrWorkerUrl.trim().replaceAll("/+$", "") : "http://localhost:8081";
+        this.ocrWorkerUrl = normalizedUrl;
         SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
         requestFactory.setConnectTimeout(Duration.ofSeconds(10));
         requestFactory.setReadTimeout(Duration.ofSeconds(120));
 
         this.restClient = RestClient.builder()
-                .baseUrl(ocrWorkerUrl)
+                .baseUrl(normalizedUrl)
                 .requestFactory(requestFactory)
                 .build();
     }
@@ -64,9 +65,8 @@ public class PaddleOcrRestClient implements OcrVisionClient {
 
             return response != null ? response : Collections.emptyList();
         } catch (Exception e) {
-            log.warn("Failed to call OCR worker at {}: {}. Will handle or fallback if configured.",
-                    ocrWorkerUrl, e.getMessage());
-            throw new RuntimeException("OCR worker service unavailable: " + e.getMessage(), e);
+            log.warn("Failed to call OCR worker at {}: {}.", ocrWorkerUrl, e.getMessage());
+            throw new RuntimeException("Dịch vụ quét hóa đơn (OCR) hiện tạm thời không phản hồi. Vui lòng thử lại sau vài giây hoặc nhập giao dịch thủ công.", e);
         }
     }
 }
