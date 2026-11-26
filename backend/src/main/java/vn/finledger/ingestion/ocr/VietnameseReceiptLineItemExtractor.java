@@ -50,6 +50,11 @@ public class VietnameseReceiptLineItemExtractor {
             ".*(?:0[35789]\\d{8}|02\\d{9}|0[1-9]\\d{2}[.\\s]?\\d{3}[.\\s]?\\d{3,4}|\\+84[35789]\\d{8}).*"
     );
 
+    private static final Pattern DATE_ROW_PATTERN = Pattern.compile(
+            ".*(?:\\bTHANG\\s+\\d{1,2}\\b|\\b\\d{1,2}\\s+THANG\\b|\\bNAM\\s+20\\d{2}\\b|\\b\\d{1,2}[/-]\\d{1,2}[/-]20\\d{2}\\b).*",
+            Pattern.CASE_INSENSITIVE
+    );
+
     private static final Set<String> FOOTER_KEYWORDS = Set.of(
             "TONG CONG", "TONG TIEN", "TONG TIN", "TIEN HANG", "TIN HANG",
             "THANH TOAN", "THA TON", "PHAI THU", "TONG PHAI TRA",
@@ -235,6 +240,9 @@ public class VietnameseReceiptLineItemExtractor {
         if (PHONE_PATTERN.matcher(normalizedText).matches() || PHONE_PATTERN.matcher(rowText).matches()) {
             return true;
         }
+        if (DATE_ROW_PATTERN.matcher(normalizedText).matches()) {
+            return true;
+        }
         if (normalizedText.startsWith("TAPHOA") || normalizedText.startsWith("TAP HOA")
                 || normalizedText.startsWith("CUA HANG") || normalizedText.startsWith("SIEU THI")
                 || normalizedText.startsWith("MINIMART")) {
@@ -377,6 +385,15 @@ public class VietnameseReceiptLineItemExtractor {
             return null;
         }
 
+        // Guard against bare 4-digit years (1990-2035) appearing on date-like lines
+        String lastRawToken = lastBox.text().trim();
+        if (lastRawToken.matches("^(?:199\\d|20[0-3]\\d)$")) {
+            String upperFull = removeDiacritics(fullText).toUpperCase(Locale.ROOT);
+            if (upperFull.contains("NAM") || upperFull.contains("THANG") || upperFull.contains("NGAY")) {
+                return null;
+            }
+        }
+
         // Now determine quantity and product name from the remaining preceding boxes/text
         BigDecimal quantity = BigDecimal.ONE.setScale(4, RoundingMode.HALF_EVEN);
         BigDecimal unitPrice = lineAmount;
@@ -472,7 +489,7 @@ public class VietnameseReceiptLineItemExtractor {
             return null;
         }
 
-        String text = rawText.trim();
+        String text = rawText.trim().replaceAll("[,.;:]+$", "");
 
         // Reject if token is a package size/specification (e.g. 500G, 300g, 180ML, 1L, 2KG, 330ml)
         if (text.matches("(?i)^[0-9]+(?:[.,][0-9]+)?\\s*(?:g|gr|kg|ml|l|cm|mm|m|pcs|hop|chai|lon)$")) {

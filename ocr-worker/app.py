@@ -1,67 +1,90 @@
 import logging
+import math
+import statistics
 import cv2
 import numpy as np
-import pytesseract
-from pytesseract import Output
 from fastapi import FastAPI, File, UploadFile, HTTPException
+from rapidocr import RapidOCR, LangRec, OCRVersion, ModelType
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("ocr-worker")
 
-app = FastAPI(title="FinLedger VN OCR Worker", version="2.0.0")
+app = FastAPI(title="FinLedger VN OCR Worker", version="3.0.0")
+
+ocr_engine = None
 
 
-def _extract_boxes_from_image(processed_img: np.ndarray, scale: float, psm: int) -> tuple[list[dict], float]:
-    config = f"--oem 3 --psm {psm}"
-    data = pytesseract.image_to_data(
-        processed_img,
-        lang="vie+eng",
-        config=config,
-        output_type=Output.DICT,
-    )
+def get_ocr_engine():
+    global ocr_engine
+    if ocr_engine is not None:
+        return ocr_engine
 
-    boxes: list[dict] = []
-    conf_sum = 0.0
-    n_items = len(data.get("text", []))
+    configs = [
+        {
+            "Rec.lang_type": LangRec.LATIN,
+            "Rec.ocr_version": OCRVersion.PPOCRV5,
+            "Rec.model_type": ModelType.MOBILE,
+        },
+        {
+            "Rec.lang_type": LangRec.LATIN,
+            "Rec.ocr_version": OCRVersion.PPOCRV3,
+            "Rec.model_type": ModelType.MOBILE,
+        },
+        {
+            "Rec.lang_type": LangRec.LATIN,
+        },
+    ]
 
-    for i in range(n_items):
-        raw_text = (data["text"][i] or "").strip()
-        if not raw_text:
-            continue
-
+    for idx, params in enumerate(configs):
         try:
-            conf_raw = float(data["conf"][i])
-        except (TypeError, ValueError):
-            continue
+            logger.info("Initializing RapidOCR engine (config #%d)...", idx + 1)
+            ocr_engine = RapidOCR(params=params)
+            return ocr_engine
+        except Exception as e:
+            logger.warning("RapidOCR config #%d failed: %s", idx + 1, e)
 
-        if conf_raw < 20.0:
-            continue
+    logger.info("Initializing RapidOCR default fallback...")
+    ocr_engine = RapidOCR()
+    return ocr_engine
 
-        left = float(data["left"][i]) / scale
-        top = float(data["top"][i]) / scale
-        width = float(data["width"][i]) / scale
-        height = float(data["height"][i]) / scale
 
-        if width <= 0 or height <= 0:
-            continue
-
-        conf_norm = max(0.0, min(1.0, conf_raw / 100.0))
-        conf_sum += conf_norm
-        boxes.append({
-            "text": raw_text,
-            "xMin": left,
-            "yMin": top,
-            "xMax": left + width,
-            "yMax": top + height,
-            "confidence": conf_norm,
-        })
-
-    return boxes, conf_sum
+@app.on_event("startup")
+def startup_event():
+    get_ocr_engine()
 
 
 @app.get("/health")
 def health():
-    return {"status": "UP", "service": "ocr-worker", "engine": "tesseract-vie"}
+    return {"status": "UP", "service": "ocr-worker", "engine": "rapidocr-latin"}
+
+
+def _estimate_tilt_angle(boxes) -> float:
+    angles: list[float] = []
+    for poly in boxes:
+        if poly is None or len(poly) < 4:
+            continue
+        p0, p1, _, p3 = poly[0], poly[1], poly[2], poly[3]
+        width = math.hypot(float(p1[0]) - float(p0[0]), float(p1[1]) - float(p0[1]))
+        height = math.hypot(float(p3[0]) - float(p0[0]), float(p3[1]) - float(p0[1]))
+        if height <= 0 or width <= 2.2 * height:
+            continue
+        angle = math.atan2(float(p1[1]) - float(p0[1]), float(p1[0]) - float(p0[0]))
+        if abs(angle) <= 0.35:
+            angles.append(angle)
+
+    if len(angles) >= 3:
+        return statistics.median(angles)
+    return 0.0
+
+
+def _rotate_point(x: float, y: float, cx: float, cy: float, angle: float) -> tuple[float, float]:
+    if angle == 0.0:
+        return x, y
+    cos_a = math.cos(angle)
+    sin_a = math.sin(angle)
+    dx = x - cx
+    dy = y - cy
+    return cx + dx * cos_a - dy * sin_a, cy + dx * sin_a + dy * cos_a
 
 
 @app.post("/predict")
@@ -84,38 +107,62 @@ async def predict(file: UploadFile = File(...)):
         h, w = img.shape[:2]
         max_dim = max(h, w)
         scale = 1.0
-        if max_dim < 1000:
-            scale = 1400.0 / max_dim
-            img = cv2.resize(
-                img,
-                (max(1, int(w * scale)), max(1, int(h * scale))),
-                interpolation=cv2.INTER_CUBIC,
-            )
-        elif max_dim > 2200:
-            scale = 2000.0 / max_dim
+        if max_dim > 1800:
+            scale = 1800.0 / max_dim
             img = cv2.resize(
                 img,
                 (max(1, int(w * scale)), max(1, int(h * scale))),
                 interpolation=cv2.INTER_AREA,
             )
 
-        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        engine = get_ocr_engine()
+        result = engine(img)
 
-        # Pass 1: CLAHE local contrast enhancement (--psm 6: uniform block of text)
-        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
-        gray_clahe = clahe.apply(gray)
-        boxes, score = _extract_boxes_from_image(gray_clahe, scale, psm=6)
+        raw_boxes = getattr(result, "boxes", None)
+        raw_txts = getattr(result, "txts", None)
+        raw_scores = getattr(result, "scores", None)
 
-        # Pass 2 fallback if Pass 1 extracted too few tokens
-        if len(boxes) < 5:
-            blurred = cv2.GaussianBlur(gray, (3, 3), 0)
-            _, otsu = cv2.threshold(blurred, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-            alt_boxes, alt_score = _extract_boxes_from_image(otsu, scale, psm=4)
-            if len(alt_boxes) > len(boxes) or (len(alt_boxes) == len(boxes) and alt_score > score):
-                boxes = alt_boxes
+        if raw_boxes is None or raw_txts is None or len(raw_txts) == 0:
+            logger.info("Processed image '%s': no text boxes detected", file.filename)
+            return []
 
-        logger.info("Processed image '%s': detected %d text boxes", file.filename, len(boxes))
-        return boxes
+        tilt = _estimate_tilt_angle(raw_boxes)
+        deskew_angle = -tilt
+        cx = img.shape[1] / 2.0
+        cy = img.shape[0] / 2.0
+
+        output: list[dict] = []
+        for i, txt in enumerate(raw_txts):
+            text_str = str(txt or "").strip()
+            if not text_str:
+                continue
+
+            conf = float(raw_scores[i]) if raw_scores is not None and i < len(raw_scores) else 1.0
+            if conf < 0.30:
+                continue
+
+            poly = raw_boxes[i]
+            if poly is None or len(poly) == 0:
+                continue
+
+            xs: list[float] = []
+            ys: list[float] = []
+            for pt in poly:
+                rx, ry = _rotate_point(float(pt[0]), float(pt[1]), cx, cy, deskew_angle)
+                xs.append(rx / scale)
+                ys.append(ry / scale)
+
+            output.append({
+                "text": text_str,
+                "xMin": min(xs),
+                "yMin": min(ys),
+                "xMax": max(xs),
+                "yMax": max(ys),
+                "confidence": max(0.0, min(1.0, conf)),
+            })
+
+        logger.info("Processed image '%s': detected %d text boxes (tilt=%.4f rad)", file.filename, len(output), tilt)
+        return output
 
     except HTTPException:
         raise
