@@ -22,4 +22,5 @@ public class ParsedReceiptResult {
     private BigDecimal detectedTotalAmount;
     private BigDecimal calculatedSumAmount;
     private String merchantName;
+    private String receiptDate;
 }

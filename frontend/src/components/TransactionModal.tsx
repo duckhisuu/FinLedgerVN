@@ -46,8 +46,15 @@ export function TransactionModal() {
   const [ocrScanning, setOcrScanning] = useState(false);
   const [ocrPreviewUrl, setOcrPreviewUrl] = useState<string | null>(null);
   const [ocrMerchant, setOcrMerchant] = useState('');
+  const [ocrDateDetected, setOcrDateDetected] = useState(false);
   const [ocrItems, setOcrItems] = useState<
-    Array<{ productName: string; lineAmount: number; categoryId: string }>
+    Array<{
+      productName: string;
+      lineAmount: number;
+      categoryId: string;
+      quantity?: number;
+      unitPrice?: number;
+    }>
   >([]);
 
   const [submitting, setSubmitting] = useState(false);
@@ -92,6 +99,7 @@ export function TransactionModal() {
           setTxDate(new Date().toISOString().slice(0, 10));
           setOcrItems([]);
           setOcrMerchant('');
+          setOcrDateDetected(false);
           setOcrPreviewUrl((prev) => {
             if (prev) URL.revokeObjectURL(prev);
             return null;
@@ -173,15 +181,24 @@ export function TransactionModal() {
       return nextUrl;
     });
     setOcrScanning(true);
+    setOcrDateDetected(false);
     try {
       const preview = await financeApi.scanReceipt(file);
       setOcrMerchant(preview.merchantName || 'Hóa đơn mua sắm');
+      if (preview.receiptDate && /^\d{4}-\d{2}-\d{2}$/.test(preview.receiptDate)) {
+        setTxDate(preview.receiptDate);
+        setOcrDateDetected(true);
+      } else {
+        setOcrDateDetected(false);
+      }
       const fallbackCatId = expenseCategories[0]?.id || '';
       setOcrItems(
         preview.items.map((it: ReceiptPreviewItem) => ({
           productName: it.productName,
           lineAmount: Math.round(it.lineAmount),
           categoryId: it.suggestedCategoryId || fallbackCatId,
+          quantity: it.quantity,
+          unitPrice: it.unitPrice,
         }))
       );
     } catch (err: any) {
@@ -218,7 +235,11 @@ export function TransactionModal() {
           walletId,
           merchantName: ocrMerchant,
           transactionDate: isoDate,
-          items: ocrItems,
+          items: ocrItems.map((it) => ({
+            productName: it.productName,
+            lineAmount: it.lineAmount,
+            categoryId: it.categoryId,
+          })),
         });
       } else {
         if (numericAmount <= 0) {
@@ -420,13 +441,23 @@ export function TransactionModal() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-slate-400 mb-1.5">
-                    Ngày giao dịch
-                  </label>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="text-xs font-medium text-slate-400">
+                      Ngày giao dịch
+                    </label>
+                    {ocrDateDetected && (
+                      <span className="text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                        Từ hóa đơn
+                      </span>
+                    )}
+                  </div>
                   <input
                     type="date"
                     value={txDate}
-                    onChange={(e) => setTxDate(e.target.value)}
+                    onChange={(e) => {
+                      setTxDate(e.target.value);
+                      setOcrDateDetected(false);
+                    }}
                     className="w-full px-3.5 py-2.5 rounded-xl bg-[#0c1017] border border-white/10 text-sm text-white focus:outline-none focus:border-emerald-500"
                   />
                 </div>
@@ -468,8 +499,14 @@ export function TransactionModal() {
                           <span>Thêm món</span>
                         </button>
                       </div>
-                      <span className="mono-num font-semibold text-emerald-400">
-                        Tổng: {formatVnd(ocrTotal)}
+                      <span className="inline-flex items-center gap-1.5 font-semibold text-emerald-400">
+                        <span className="text-slate-400 font-normal">Tổng:</span>
+                        <span className="font-mono tabular-nums">
+                          {Math.round(ocrTotal).toLocaleString('vi-VN')}
+                        </span>
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 font-mono">
+                          VND
+                        </span>
                       </span>
                     </div>
                     {ocrItems.map((item, idx) => (
@@ -477,23 +514,34 @@ export function TransactionModal() {
                         key={idx}
                         className="p-3 rounded-xl bg-[#0c1017] border border-white/[0.06] space-y-2"
                       >
-                        <div className="flex items-center gap-2">
-                          <input
-                            type="text"
-                            value={item.productName}
-                            onChange={(e) => {
-                              const next = [...ocrItems];
-                              next[idx] = { ...next[idx], productName: e.target.value };
-                              setOcrItems(next);
-                            }}
-                            className="flex-1 bg-transparent text-sm text-white focus:outline-none border-b border-transparent focus:border-white/20"
-                          />
+                        <div className="flex items-start gap-2">
+                          <div className="flex-1 min-w-0">
+                            <input
+                              type="text"
+                              value={item.productName}
+                              onChange={(e) => {
+                                const next = [...ocrItems];
+                                next[idx] = { ...next[idx], productName: e.target.value };
+                                setOcrItems(next);
+                              }}
+                              className="w-full bg-transparent text-sm text-white focus:outline-none border-b border-transparent focus:border-white/20"
+                            />
+                            {item.quantity != null &&
+                              item.quantity > 1 &&
+                              item.unitPrice != null &&
+                              item.unitPrice > 0 && (
+                                <p className="mt-0.5 text-[11px] font-mono tabular-nums text-slate-400">
+                                  SL {item.quantity} ×{' '}
+                                  {Math.round(item.unitPrice).toLocaleString('vi-VN')} VND
+                                </p>
+                              )}
+                          </div>
                           <button
                             type="button"
                             onClick={() =>
                               setOcrItems(ocrItems.filter((_, i) => i !== idx))
                             }
-                            className="text-slate-500 hover:text-rose-400 p-1"
+                            className="text-slate-500 hover:text-rose-400 p-1 shrink-0"
                           >
                             <Trash2 className="w-4 h-4" />
                           </button>
@@ -745,7 +793,7 @@ export function TransactionModal() {
                   {editTx
                     ? 'Cập nhật giao dịch'
                     : mode === 'OCR'
-                      ? `Lưu hóa đơn (${formatVnd(ocrTotal)})`
+                      ? `Lưu hóa đơn (${Math.round(ocrTotal).toLocaleString('vi-VN')} VND)`
                       : 'Lưu giao dịch'}
                 </span>
               )}

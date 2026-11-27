@@ -227,6 +227,7 @@ export interface ReceiptPreviewItem {
 
 export interface ReceiptPreview {
   merchantName: string;
+  receiptDate?: string | null;
   detectedTotalAmount: number;
   computedSum: number;
   items: ReceiptPreviewItem[];

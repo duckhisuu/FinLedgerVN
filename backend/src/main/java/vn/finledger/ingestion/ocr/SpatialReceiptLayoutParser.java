@@ -53,13 +53,15 @@ public class SpatialReceiptLayoutParser {
         ReconstructedReceiptRow currentRow = null;
 
         for (OcrTextBox box : sortedByY) {
-            if (currentRow == null || Math.abs(box.yCenter() - currentRow.getAvgY()) > yTolerance) {
-                // Start a new line
+            if (currentRow == null
+                    || Math.abs(box.yCenter() - currentRow.getAvgY()) > yTolerance
+                    || hasSignificantHorizontalOverlap(box, currentRow)) {
+                // Start a new line when vertical distance exceeds tolerance or boxes stack vertically
                 currentRow = new ReconstructedReceiptRow();
                 currentRow.addBox(box);
                 rows.add(currentRow);
             } else {
-                // Box falls within vertical tolerance of the current line
+                // Box falls within vertical tolerance of the current line without vertical stacking
                 currentRow.addBox(box);
             }
         }
@@ -71,6 +73,21 @@ public class SpatialReceiptLayoutParser {
 
         log.debug("Reconstructed {} rows from {} OCR boxes", rows.size(), validBoxes.size());
         return rows;
+    }
+
+    /**
+     * Checks if a candidate box overlaps horizontally (>35% of the narrower box width) with any box
+     * already in the row, indicating vertically stacked lines (such as tightly spaced headers).
+     */
+    private boolean hasSignificantHorizontalOverlap(OcrTextBox candidate, ReconstructedReceiptRow row) {
+        for (OcrTextBox existing : row.getBoxes()) {
+            double overlap = Math.min(candidate.xMax(), existing.xMax()) - Math.max(candidate.xMin(), existing.xMin());
+            double minWidth = Math.min(candidate.width(), existing.width());
+            if (minWidth > 0 && overlap > 0 && (overlap / minWidth) > 0.35) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**

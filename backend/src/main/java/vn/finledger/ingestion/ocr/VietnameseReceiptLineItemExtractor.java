@@ -6,6 +6,8 @@ import org.springframework.stereotype.Component;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.text.Normalizer;
+import java.time.DateTimeException;
+import java.time.LocalDate;
 import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -55,6 +57,14 @@ public class VietnameseReceiptLineItemExtractor {
             Pattern.CASE_INSENSITIVE
     );
 
+    private static final Pattern DATE_VI_TEXT_PATTERN = Pattern.compile(
+            "(?:NGAY|GAY|AY)?\\s*(\\d{1,2})\\s+THANG\\s+(\\d{1,2})\\s+NAM\\s+(20\\d{2})"
+    );
+
+    private static final Pattern DATE_NUMERIC_PATTERN = Pattern.compile(
+            "\\b(\\d{1,2})[/-](\\d{1,2})[/-](20\\d{2})\\b"
+    );
+
     private static final Set<String> FOOTER_KEYWORDS = Set.of(
             "TONG CONG", "TONG TIEN", "TONG TIN", "TIEN HANG", "TIN HANG",
             "THANH TOAN", "THA TON", "PHAI THU", "TONG PHAI TRA",
@@ -86,6 +96,8 @@ public class VietnameseReceiptLineItemExtractor {
         List<ReceiptLineItemDto> lineItems = new ArrayList<>();
         BigDecimal detectedTotalAmount = null;
         String merchantName = null;
+        String fallbackMerchantName = null;
+        String detectedReceiptDate = null;
         String pendingItemName = null;
         boolean inFooterZone = false;
 
@@ -98,12 +110,19 @@ public class VietnameseReceiptLineItemExtractor {
 
             String normalizedText = removeDiacritics(rowText).toUpperCase();
 
+            // Extract receipt date from header/metadata rows (ISO YYYY-MM-DD)
+            if (detectedReceiptDate == null && i < 10) {
+                detectedReceiptDate = extractReceiptDate(normalizedText);
+            }
+
             // Detect merchant name from early header rows if possible
-            if (merchantName == null && i < 4) {
+            if (merchantName == null && i < 5) {
                 if (normalizedText.contains("WINMART") || normalizedText.contains("BACH HOA XANH")
                         || normalizedText.contains("CIRCLE K") || normalizedText.contains("COOPMART")
                         || normalizedText.contains("TAP HOA") || normalizedText.contains("TAPHOA")) {
                     merchantName = cleanMerchantName(rowText);
+                } else if (fallbackMerchantName == null && isFallbackMerchantCandidate(normalizedText)) {
+                    fallbackMerchantName = cleanMerchantName(rowText);
                 }
             }
 
@@ -192,11 +211,16 @@ public class VietnameseReceiptLineItemExtractor {
             detectedTotalAmount = calculatedSum;
         }
 
+        if (merchantName == null) {
+            merchantName = fallbackMerchantName;
+        }
+
         return ParsedReceiptResult.builder()
                 .lineItems(lineItems)
                 .detectedTotalAmount(detectedTotalAmount)
                 .calculatedSumAmount(calculatedSum)
                 .merchantName(merchantName)
+                .receiptDate(detectedReceiptDate)
                 .build();
     }
 
@@ -574,12 +598,56 @@ public class VietnameseReceiptLineItemExtractor {
         return text.chars().anyMatch(Character::isLetter);
     }
 
+    private String extractReceiptDate(String normalizedText) {
+        if (normalizedText == null || normalizedText.isBlank()) {
+            return null;
+        }
+        Matcher m = DATE_VI_TEXT_PATTERN.matcher(normalizedText);
+        if (!m.find()) {
+            m = DATE_NUMERIC_PATTERN.matcher(normalizedText);
+            if (!m.find()) {
+                return null;
+            }
+        }
+        try {
+            int day = Integer.parseInt(m.group(1));
+            int month = Integer.parseInt(m.group(2));
+            int year = Integer.parseInt(m.group(3));
+            return LocalDate.of(year, month, day).toString();
+        } catch (NumberFormatException | DateTimeException e) {
+            return null;
+        }
+    }
+
+    private boolean isFallbackMerchantCandidate(String normalizedText) {
+        if (normalizedText == null || normalizedText.isBlank()) {
+            return false;
+        }
+        if (PHONE_PATTERN.matcher(normalizedText).matches() || DATE_ROW_PATTERN.matcher(normalizedText).matches()) {
+            return false;
+        }
+        if (normalizedText.contains("KIOTVIET") || normalizedText.contains("HOA DON")
+                || normalizedText.contains("SO HD") || normalizedText.contains("PHIEU THANH TOAN")
+                || normalizedText.contains("DIA CHI") || normalizedText.contains("DJA CH")
+                || normalizedText.contains("DIEN THOAI") || normalizedText.contains("DIN THOAI")
+                || normalizedText.contains("DON GIA") || normalizedText.contains("THANH TIEN")
+                || normalizedText.contains("KHACH") || normalizedText.contains("THU NGAN")
+                || normalizedText.contains("MST")) {
+            return false;
+        }
+        long letterCount = normalizedText.chars().filter(Character::isLetter).count();
+        return letterCount >= 3;
+    }
+
     private String cleanMerchantName(String raw) {
         if (raw == null) {
             return "Cửa hàng bán lẻ";
         }
-        String cleaned = raw.replaceAll("(?i)\\s*(?:Đia|Địa|Dia)\\s*(?:chl|chi|chí).*$", "").trim();
-        return cleaned.isBlank() ? raw : cleaned;
+        String cleaned = raw.replaceAll(
+                "(?iu)\\s*(?:Đ[iị]a\\s*ch[iỉ]|Dia\\s*chi|Dja\\s*chl|Đ[iị]en\\s*tho[aạ]i|Dien\\s*thoai|SDT|DT:|MST).*$",
+                ""
+        ).trim();
+        return cleaned.isBlank() ? raw.trim() : cleaned;
     }
 
     private String cleanProductName(String name) {

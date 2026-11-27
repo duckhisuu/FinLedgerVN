@@ -395,4 +395,52 @@ public class SpatialReceiptOcrParserTest {
         assertThat(parsed.getCalculatedSumAmount()).isEqualByComparingTo(new BigDecimal("200000"));
         assertThat(parsed.getDetectedTotalAmount()).isEqualByComparingTo(new BigDecimal("200000"));
     }
+
+    @Test
+    @DisplayName("Test 6 - KiotViet Stacked Header Split, Receipt Date Extraction & Full Vietnamese Diacritics")
+    void testKiotVietStackedHeaderDateExtractionAndVietnameseDiacritics() {
+        List<OcrTextBox> boxes = List.of(
+                new OcrTextBox("KiotViet", 240, 20, 420, 50, 0.98),
+                new OcrTextBox("taphoaa83", 264, 64, 375, 98, 0.96),
+                new OcrTextBox("Địa chỉ: --", 270, 81, 362, 111, 0.94),
+                new OcrTextBox("Điện thoại: 0912259491", 206, 98, 439, 138, 0.95),
+                new OcrTextBox("HÓA ĐƠN TẠM TÍNH", 206, 136, 446, 178, 0.98),
+                new OcrTextBox("Số HĐ: Hóa đơn 7", 235, 164, 421, 198, 0.96),
+                new OcrTextBox("gày 22 tháng 01 năm 2026", 193, 189, 470, 226, 0.93),
+                new OcrTextBox("Đơn giá", 68, 371, 167, 405, 0.97),
+                new OcrTextBox("SL", 370, 370, 410, 401, 0.99),
+                new OcrTextBox("Thành tiền", 464, 370, 587, 405, 0.99),
+                new OcrTextBox("Sa Tế Tôm Thuận Phát 85gr (108c/t)", 68, 409, 489, 442, 0.97),
+                new OcrTextBox("9,000", 65, 449, 135, 479, 0.98),
+                new OcrTextBox("4", 392, 449, 412, 474, 0.99),
+                new OcrTextBox("36,000", 515, 449, 593, 477, 0.99),
+                new OcrTextBox("Tương Ớt Chin-Su 500Gr (12c/t)", 65, 484, 450, 521, 0.97),
+                new OcrTextBox("30,000", 62, 525, 149, 557, 0.98),
+                new OcrTextBox("2", 394, 527, 418, 553, 0.99),
+                new OcrTextBox("60,000", 521, 526, 601, 557, 0.99),
+                new OcrTextBox("Lẩu Thái Aji-Quick 50Gr (60g/t)", 62, 565, 435, 601, 0.97),
+                new OcrTextBox("8,000", 60, 607, 134, 640, 0.98),
+                new OcrTextBox("6", 398, 609, 421, 636, 0.99),
+                new OcrTextBox("48,000", 525, 607, 607, 639, 0.99),
+                new OcrTextBox("Giấy Ăn AL Airline 0001 (14b/t) (DMV)", 61, 649, 517, 684, 0.98),
+                new OcrTextBox("28,000", 56, 693, 146, 728, 0.99),
+                new OcrTextBox("2", 399, 694, 422, 721, 0.99),
+                new OcrTextBox("56,000", 528, 691, 609, 724, 0.99),
+                new OcrTextBox("Tổng thanh toán:", 225, 841, 433, 880, 0.97),
+                new OcrTextBox("200,000", 510, 835, 602, 869, 0.99)
+        );
+
+        List<ReconstructedReceiptRow> rows = spatialParser.parse(boxes);
+        ParsedReceiptResult parsed = lineItemExtractor.extract(rows);
+
+        assertThat(parsed.getMerchantName()).isEqualTo("taphoaa83");
+        assertThat(parsed.getReceiptDate()).isEqualTo("2026-01-22");
+        assertThat(parsed.getLineItems()).hasSize(4);
+        assertThat(parsed.getLineItems().get(0).getProductName()).isEqualTo("Sa Tế Tôm Thuận Phát 85gr (108c/t)");
+        assertThat(parsed.getLineItems().get(1).getProductName()).isEqualTo("Tương Ớt Chin-Su 500Gr (12c/t)");
+        assertThat(parsed.getLineItems().get(2).getProductName()).isEqualTo("Lẩu Thái Aji-Quick 50Gr (60g/t)");
+        assertThat(parsed.getLineItems().get(3).getProductName()).isEqualTo("Giấy Ăn AL Airline 0001 (14b/t) (DMV)");
+        assertThat(parsed.getCalculatedSumAmount()).isEqualByComparingTo(new BigDecimal("200000"));
+        assertThat(parsed.getDetectedTotalAmount()).isEqualByComparingTo(new BigDecimal("200000"));
+    }
 }

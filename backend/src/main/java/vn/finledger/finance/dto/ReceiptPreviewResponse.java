@@ -13,6 +13,7 @@ import java.util.UUID;
 @Builder
 public class ReceiptPreviewResponse {
     private String merchantName;
+    private String receiptDate;
     private BigDecimal detectedTotalAmount;
     private BigDecimal computedSum;
     private List<ReceiptPreviewItem> items;

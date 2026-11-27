@@ -958,6 +958,7 @@ public class PersonalFinanceService {
 
         return ReceiptPreviewResponse.builder()
                 .merchantName(parsed.getMerchantName() != null ? parsed.getMerchantName() : "Hóa đơn mua sắm")
+                .receiptDate(parsed.getReceiptDate())
                 .detectedTotalAmount(detectedTotal)
                 .computedSum(computedSum)
                 .items(previewItems)
